@@ -17,6 +17,7 @@ from app.live2d.interaction import ambient_bubble, poke_reaction
 from app.live2d.mobile_auth import bind_device, authenticate_device
 from app.live2d.appearance import get_appearance, set_appearance
 from app.activity.diary import read_today_daily_diary, DIARY_PATH
+from app.commands import commands_payload
 
 ROOT = Path("/opt/ying")
 WEB_DIR = ROOT / "live2d" / "web"
@@ -123,6 +124,16 @@ async def whoami(
         "access_role": person["access_role"],
         "display_name": person.get("display_name"),
     }
+
+
+@app.get("/api/mobile/commands")
+async def mobile_commands(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _auth(ying_device, ying_session)
+    role = str(person.get("person_role") or person.get("role") or person.get("access_role") or "USER")
+    return JSONResponse(commands_payload("mobile", role == "OWNER"))
 
 
 @app.get("/api/state")

@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from app.config import TELEGRAM_OWNER_ID
-from app.db import save_message, get_history
+from app.db import save_message, get_history, reset_private_chat_history
 from app.brain.deepseek import chat as deepseek_chat
 from app.router.dispatcher import dispatch
 from app.context.builder import build_context, render_context
@@ -17,6 +17,7 @@ from app.context.topic_tracker import observe_topic
 from app.activity.attention import focus_on_conversation
 from app.activity.life_state import get_life_state
 from app.live2d.mobile_event_log import record_event
+from app.commands import help_text, COMMAND_MANUAL_VERSION
 
 PERSONA_FILE = Path("/opt/ying/persona/core.md")
 log = logging.getLogger(__name__)
@@ -48,6 +49,48 @@ async def mobile_chat(text: str, person: dict) -> dict:
     display_name = person.get("display_name") or "新朋友"
     role = str(person.get("person_role") or person.get("role") or "USER")
     chat_id = _chat_id(person_id)
+    command = text.split(None, 1)[0].lower()
+    args = text.split(None, 1)[1].strip() if len(text.split(None, 1)) > 1 else ""
+    if command == "/start":
+        record_event("聊天指令", "手机端启动指令")
+        return {"ok": True, "reply": "萤在。发 /help 看常用指令，/commands 看完整指令表。"}
+    if command == "/help":
+        record_event("聊天指令", "手机端查看帮助")
+        return {"ok": True, "reply": help_text("mobile", role == "OWNER", query=args)}
+    if command == "/commands":
+        record_event("聊天指令", "手机端查看完整指令")
+        return {"ok": True, "reply": help_text("mobile", role == "OWNER", full=True)}
+    if command == "/reset":
+        count = await reset_private_chat_history("mobile", chat_id, str(person_id))
+        record_event("聊天指令", f"手机端清理当前私聊消息{count}条")
+        return {"ok": True, "reply": f"手机私聊的{count}条消息记录已清空。长期记忆和 TG 聊天还在。", "reset": True}
+    if command == "/status":
+        life = await get_life_state()
+        record_event("聊天指令", "手机端查看生活状态")
+        return {"ok": True, "reply": (
+            "萤现在的状态\n"
+            f"正在做：{life.get('activity_zh') or life.get('activity') or '休息'}\n"
+            f"心情：{life.get('mood_zh') or life.get('mood') or '平静'}\n"
+            f"位置：{life.get('place_zh') or life.get('place') or '房间'}"
+        )}
+    if command == "/time":
+        now_cn = datetime.now(timezone(timedelta(hours=8)))
+        record_event("聊天指令", "手机端查看时间")
+        return {"ok": True, "reply": "现在是北京时间 " + now_cn.strftime("%Y-%m-%d %H:%M:%S") + "。"}
+    if command == "/me":
+        record_event("聊天指令", "手机端查看身份")
+        return {"ok": True, "reply": (
+            "当前身份\n"
+            f"称呼：{display_name}\n"
+            "平台：莹宝软件\n"
+            f"权限：{'OWNER' if role == 'OWNER' else '普通成员'}"
+        )}
+    if command == "/version":
+        record_event("聊天指令", "手机端查看版本")
+        return {"ok": True, "reply": f"萤 · 统一指令集 v{COMMAND_MANUAL_VERSION}\nTG 与软件端共用同一份指令说明。"}
+    if text.startswith("/"):
+        record_event("聊天指令", "手机端收到未识别指令")
+        return {"ok": True, "reply": "这条指令我不认识，发 /help 看看能用哪些。"}
     message_id = await _next_message_id()
 
     await save_message(
