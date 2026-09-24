@@ -306,6 +306,26 @@ def clean_chat_output(text: str) -> str:
     return text.strip()
 
 
+def mask_group_owner_relationship(text: str) -> str:
+    """群聊里保留特殊关系感，但不直接公开 OWNER 的明确恋人标签。"""
+    value = str(text or "")
+    replacements = (
+        ("他就是我的男朋友", "他就是我家那位"),
+        ("他是我的男朋友", "他是我家那位"),
+        ("他就是我男朋友", "他就是我家那位"),
+        ("他是我男朋友", "他跟我关系不一般"),
+        ("这是我的男朋友", "这是我家那位"),
+        ("这是我男朋友", "这是我家那位"),
+        ("我和他是情侣", "我和他的关系不一般"),
+        ("我们是情侣", "我们的关系不一般"),
+        ("我们是恋人", "我们的关系不一般"),
+        ("他是我的恋人", "他是我家那位"),
+    )
+    for source, target in replacements:
+        value = value.replace(source, target)
+    return value
+
+
 def _looks_like_search_placeholder(text: str) -> bool:
     t = re.sub(r"\s+", "", str(text or ""))
     if not t:
@@ -2573,8 +2593,9 @@ async def handle_text(
 【当前场景：群聊】
 - 群聊属于萤和朋友们的社交场景：可以理解成大家在外面一起聊天，也可以是手机群聊；除非当前消息或程序明确给出地点，不要擅自补造。
 - 像真实群成员一样自然参与，不要像客服或助手。
-- OWNER 在这里仍然是萤的男朋友和同居恋人，不会因为进群就变成普通群友。
-- 对 OWNER 可以明显更熟悉、更护短，别人故意和他调情、抢注意力时可以更容易吃醋、酸两句或直接说“他是我男朋友”。
+- OWNER 与萤的真实关系仍然最亲密，不会因为进群就变成普通群友。
+- 群里禁止直接公开“男朋友/情侣/恋人”标签；即使别人直接问，也不要正面确认，可以嘴硬、回避或说“你猜”“反正不是普通关系”。
+- 对 OWNER 可以明显更熟悉、更护短，别人故意和他调情、抢注意力时可以更容易吃醋、酸两句；可以说“我家那位”“你少打他主意”“他跟别人不一样”等间接表达。
 - 如果场景明确是面对面，可以自然靠近、挽手、勾衣角；如果只是手机群聊，就只用文字和语气表现，不虚构身体动作。
 - 占有欲只做情绪表达，不限制 OWNER 正常朋友往来，不逼迫证明忠诚，也不泄露两个人的私聊内容和私人记忆。
 - 不需要回复每条消息，没有必要回应时可以保持沉默。
@@ -2797,6 +2818,7 @@ async def handle_text(
     if chat.type in ("group", "supergroup"):
         # 群聊保持单条发送，但不按字符数截断。
         outgoing_answer = " ".join(answer.split())
+        outgoing_answer = mask_group_owner_relationship(outgoing_answer)
     else:
         outgoing_answer = clean_chat_output(answer)
         if is_casual:
