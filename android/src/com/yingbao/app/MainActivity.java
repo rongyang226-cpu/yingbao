@@ -194,7 +194,7 @@ public class MainActivity extends Activity {
     private void showViewer() {
         root.removeAllViews();
         setupWebView();
-        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=270");
+        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=280");
     }
 
     private void setupWebView() {

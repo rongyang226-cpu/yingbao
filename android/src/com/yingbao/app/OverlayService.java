@@ -348,12 +348,29 @@ public class OverlayService extends Service {
             ny < .59f && (nx < .34f || nx > .68f) ? 1 :
             ny < .55f ? 2 : ny > .88f && nx > .38f && nx < .62f ? 4 : 3;
         String[] choices = TOUCH_REACTIONS[zone];
-        showBubble(choices[random.nextInt(choices.length)], 2600);
+        String reply = choices[random.nextInt(choices.length)];
+        showBubble(reply, 2600);
+        final String area = new String[]{"head", "hair", "hand", "skirt", "feet"}[zone];
+        new Thread(() -> {
+            try {
+                JSONObject log = new JSONObject();
+                log.put("zone", area);
+                log.put("text", reply);
+                request("POST", "/api/mobile/touch", log.toString());
+            } catch (Exception ignored) {}
+        }).start();
     }
 
     private void refreshAppearance() {
         if (getSharedPreferences("ying_overlay", MODE_PRIVATE).getBoolean("hd_art", true)) {
-            handler.post(() -> { if (modelView != null) modelView.setImageResource(R.drawable.yingbao_model_hd); });
+            new Thread(() -> {
+                String pose = "stand";
+                try { pose = request("GET", "/api/mobile/appearance", null).optString("pose", "stand"); }
+                catch (Exception ignored) {}
+                final int art = "wave".equals(pose) ? R.drawable.yingbao_pose_wave
+                    : "clasp".equals(pose) ? R.drawable.yingbao_pose_clasp : R.drawable.yingbao_model_hd;
+                handler.post(() -> { if (modelView != null) modelView.setImageResource(art); });
+            }).start();
             return;
         }
         new Thread(() -> {

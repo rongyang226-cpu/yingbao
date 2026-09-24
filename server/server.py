@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Cookie, HTTPException
@@ -21,11 +22,36 @@ ROOT = Path("/opt/ying")
 WEB_DIR = ROOT / "live2d" / "web"
 MODEL_DIR = ROOT / "live2d" / "model"
 
-app = FastAPI(title="Yingbao Bridge", version="0.2.0")
+app = FastAPI(title="Yingbao Bridge", version="0.3.0")
 MODEL_DIR.mkdir(parents=True, exist_ok=True)
 WEB_DIR.mkdir(parents=True, exist_ok=True)
 app.mount("/model", StaticFiles(directory=str(MODEL_DIR)), name="model")
 app.mount("/assets", StaticFiles(directory=str(WEB_DIR / "assets")), name="assets")
+
+
+@app.middleware("http")
+async def record_mobile_requests(request, call_next):
+    from time import perf_counter
+    from app.live2d.mobile_event_log import record_event
+    path = request.url.path
+    if not path.startswith("/api/mobile/") and not path.startswith("/api/interaction/"):
+        return await call_next(request)
+    start = perf_counter()
+    labels = {
+        "bind": "设备绑定", "chat": "聊天", "appearance": "更换姿态或衣着",
+        "weather": "天气", "diary": "日记", "games": "游戏", "logs": "日志",
+        "poke": "触碰", "whoami": "身份验证",
+    }
+    name = next((value for key, value in labels.items() if key in path), "手机操作")
+    try:
+        response = await call_next(request)
+    except Exception as exc:
+        record_event("接口错误", f"{name}请求发生异常，耗时{(perf_counter()-start):.2f}秒", error=exc)
+        raise
+    if request.method != "GET" or response.status_code >= 400:
+        kind = "接口错误" if response.status_code >= 400 else "操作完成"
+        record_event(kind, f"{name}请求结束，状态码{response.status_code}，耗时{(perf_counter()-start):.2f}秒")
+    return response
 
 
 class BindRequest(BaseModel):
@@ -40,6 +66,10 @@ class ChatRequest(BaseModel):
 class PokeRequest(BaseModel):
     area: str = "body"
     streak: int = 1
+
+class LocalTouchEvent(BaseModel):
+    zone: str
+    text: str
 
 class AppearanceRequest(BaseModel):
     pose: str | None = None
@@ -171,6 +201,21 @@ async def poke(
 ):
     await _auth(ying_device, ying_session)
     return {"ok": True, "text": await poke_reaction(req.area, req.streak)}
+@app.post("/api/mobile/touch")
+async def mobile_touch(
+    req: LocalTouchEvent,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    await _auth(ying_device, ying_session)
+    names = {"head": "头部", "hair": "头发", "hand": "手边", "skirt": "裙摆", "feet": "脚边"}
+    if req.zone not in names or len(req.text) > 80:
+        raise HTTPException(status_code=400, detail="触碰记录无效")
+    from app.live2d.mobile_event_log import record_event
+    record_event("触碰回应", f"轻触{names[req.zone]}，萤回应：{req.text}")
+    return {"ok": True}
+
+
 @app.get("/api/mobile/diary")
 async def mobile_diary_api(
     ying_device: str | None = Cookie(default=None),
@@ -211,6 +256,218 @@ async def model_info():
         ),
     }
 
+
+GAME_NAMES = {"2048": "2048", "chess": "国际象棋", "gomoku": "五子棋", "jump_jump": "跳一跳", "match3": "三消", "go": "围棋"}
+GAME_SESSIONS = ROOT / "games" / "sessions"
+_game_lock = asyncio.Lock()
+
+
+def _game_summary(path: Path) -> dict:
+    data = json.loads(path.read_text(encoding="utf-8"))
+    game = str(data.get("game") or path.name.split("_")[0])
+    if game not in GAME_NAMES or data.get("mode") != "real":
+        raise ValueError("游戏记录未通过验证")
+    score = data.get("score")
+    winner = data.get("winner") or data.get("result")
+    summary = (f"得分 {score}" if score is not None else f"结果 {winner}" if winner else "已结束")
+    return {
+        "编号": path.name,
+        "游戏": game,
+        "名称": GAME_NAMES[game],
+        "时间": data.get("ended_at") or data.get("finished_at") or data.get("started_at") or "",
+        "总结": summary,
+        "步数": data.get("move_count") or len(data.get("moves") or data.get("history") or []),
+        "已验证": True,
+    }
+
+
+MOBILE_2048_DIR = ROOT / "games" / "mobile_sessions"
+_mobile2048_lock = asyncio.Lock()
+
+
+def _mobile2048_file(person_id: int) -> Path:
+    return MOBILE_2048_DIR / f"{int(person_id)}_2048.json"
+
+
+def _mobile2048_response(state: dict) -> dict:
+    return {"棋盘": state["board"], "得分": state["score"], "最大数字": max(max(row) for row in state["board"]), "步数": len(state["moves"]), "结束": state.get("finished", False), "对局编号": state.get("session", "")}
+
+
+async def _game_owner(ying_device: str | None, ying_session: str | None) -> dict:
+    person = await _auth(ying_device, ying_session)
+    if str(person.get("person_role") or person.get("role")) != "OWNER":
+        raise HTTPException(status_code=403, detail="仅本人可以操作游戏")
+    return person
+
+
+@app.get("/api/mobile/games/2048/current")
+async def current_mobile_2048(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    path = _mobile2048_file(person["person_id"])
+    if not path.exists():
+        return {"无对局": True}
+    return _mobile2048_response(json.loads(path.read_text(encoding="utf-8")))
+
+
+@app.post("/api/mobile/games/2048/start")
+async def start_mobile_2048(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    from games.real.game2048 import Game2048
+    from app.live2d.mobile_event_log import record_event
+    async with _mobile2048_lock:
+        game = Game2048()
+        state = {"game": "2048", "mode": "real", "started_at": datetime.now(timezone.utc).isoformat(), "board": game.board, "score": 0, "moves": [], "finished": False}
+        MOBILE_2048_DIR.mkdir(parents=True, exist_ok=True)
+        path = _mobile2048_file(person["person_id"])
+        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        record_event("游戏开始", "你在手机上开始一局真实的2048，规则运行在 VPS", game="2048")
+        return _mobile2048_response(state)
+
+
+class Mobile2048Move(BaseModel):
+    direction: str
+
+
+@app.post("/api/mobile/games/2048/move")
+async def move_mobile_2048(
+    req: Mobile2048Move,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    if req.direction not in {"left", "right", "up", "down"}:
+        raise HTTPException(status_code=400, detail="移动方向无效")
+    from games.real.game2048 import Game2048
+    from app.live2d.mobile_event_log import record_event
+    async with _mobile2048_lock:
+        path = _mobile2048_file(person["person_id"])
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="请先开始对局")
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if state.get("finished"):
+            return _mobile2048_response(state)
+        game = Game2048.__new__(Game2048)
+        game.board = state["board"]
+        game.score = state["score"]
+        changed = game.move(req.direction)
+        if not changed:
+            return _mobile2048_response(state)
+        state["board"] = game.board
+        state["score"] = game.score
+        step = len(state["moves"]) + 1
+        state["moves"].append({"turn": step, "direction": req.direction, "score": game.score, "max_tile": game.max_tile(), "board": [row[:] for row in game.board]})
+        state["finished"] = not game.can_move() or game.max_tile() >= 2048
+        names = {"left": "左", "right": "右", "up": "上", "down": "下"}
+        record_event("游戏操作", f"2048 第{step}步向{names[req.direction]}滑动，得分{game.score}，最大数字{game.max_tile()}", game="2048")
+        if state["finished"]:
+            state.update(ended_at=datetime.now(timezone.utc).isoformat(), move_count=step, max_tile=game.max_tile(), won=game.max_tile()>=2048, final_board=game.board)
+            GAME_SESSIONS.mkdir(parents=True, exist_ok=True)
+            filename="2048_mobile_"+datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")+"_"+str(person["person_id"])+".json"
+            (GAME_SESSIONS / filename).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            state["session"] = filename
+            record_event("游戏完成", f"手机2048对局结束，共{step}步，得分{game.score}", game="2048", result={"编号": filename})
+        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        return _mobile2048_response(state)
+
+
+@app.get("/api/mobile/games")
+async def mobile_games(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _auth(ying_device, ying_session)
+    if str(person.get("person_role") or person.get("role")) != "OWNER":
+        raise HTTPException(status_code=403, detail="仅本人可查看游戏")
+    files = sorted(GAME_SESSIONS.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
+    recent = []
+    for path in files:
+        try:
+            recent.append(_game_summary(path))
+        except (ValueError, OSError, json.JSONDecodeError):
+            continue
+        if len(recent) >= 24:
+            break
+    return {"游戏": [{"编号": key, "名称": label} for key, label in GAME_NAMES.items()], "最近对局": recent}
+
+
+@app.get("/api/mobile/games/session/{session_id}")
+async def mobile_game_session(
+    session_id: str,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _auth(ying_device, ying_session)
+    if str(person.get("person_role") or person.get("role")) != "OWNER":
+        raise HTTPException(status_code=403, detail="仅本人可查看游戏")
+    import re
+    if not re.fullmatch(r"[a-z0-9_]+\.json", session_id):
+        raise HTTPException(status_code=400, detail="对局编号无效")
+    path = GAME_SESSIONS / session_id
+    if not path.is_file() or path.stat().st_size > 2_000_000:
+        raise HTTPException(status_code=404, detail="找不到对局")
+    try:
+        info = _game_summary(path)
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (ValueError, OSError, json.JSONDecodeError):
+        raise HTTPException(status_code=422, detail="对局记录损坏")
+    return {"对局": info, "数据": data}
+
+
+@app.post("/api/mobile/games/{game}/play")
+async def mobile_game_play(
+    game: str,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _auth(ying_device, ying_session)
+    if str(person.get("person_role") or person.get("role")) != "OWNER":
+        raise HTTPException(status_code=403, detail="仅本人可以启动游戏")
+    if game not in GAME_NAMES:
+        raise HTTPException(status_code=400, detail="游戏不支持")
+    if _game_lock.locked():
+        raise HTTPException(status_code=409, detail="正在运行另一场游戏")
+    from app.activity.entertainment import play_real_game
+    from app.live2d.mobile_event_log import record_event
+    async with _game_lock:
+        record_event("游戏开始", f"按用户操作启动{GAME_NAMES[game]}真实引擎", game=GAME_NAMES[game])
+        try:
+            outcome = await asyncio.wait_for(play_real_game(game), timeout=110)
+            path = Path(outcome["session_file"])
+            if path.parent.resolve() != GAME_SESSIONS.resolve():
+                raise ValueError("对局记录位置无效")
+            info = _game_summary(path)
+            record_event("游戏完成", f"{GAME_NAMES[game]}真实对局结束；{info['总结']}；共{info['步数']}步", game=GAME_NAMES[game], result={"编号": path.name, "得分": outcome["result"].get("score"), "步数": info["步数"]})
+            return {"对局": info}
+        except Exception as exc:
+            record_event("游戏错误", f"{GAME_NAMES[game]}运行失败，已停止本次对局", game=GAME_NAMES[game], error=exc)
+            raise HTTPException(status_code=503, detail="游戏运行失败，错误已写入日志")
+
+
+@app.get("/api/mobile/logs")
+async def mobile_logs(
+    limit: int = 80,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _auth(ying_device, ying_session)
+    if str(person.get("person_role") or person.get("role")) != "OWNER":
+        raise HTTPException(status_code=403, detail="仅本人可查看日志")
+    from app.activity.life_log import read_recent_life_log
+    from app.live2d.mobile_event_log import recent_events
+    limit = max(1, min(limit, 160))
+    items = [
+        {"时间": item.get("time", ""), "类型": "生活", "说明": item.get("detail") or "状态更新", "心情": item.get("mood") or "", "想法": item.get("thought") or ""}
+        for item in read_recent_life_log(limit)
+    ]
+    items.extend(recent_events(limit))
+    items.sort(key=lambda item: item.get("时间", ""), reverse=True)
+    return {"记录": items[:limit]}
 
 @app.get("/viewer")
 async def viewer():
