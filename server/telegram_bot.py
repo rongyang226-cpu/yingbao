@@ -76,6 +76,7 @@ from app.activity.entertainment_context import get_recent_entertainment_context
 from app.activity.home_world import (
     get_home_world,
 )
+from app.live2d.state import build_live2d_state
 from app.activity.life_log import (
     read_today_life_log,
     read_recent_life_log,
@@ -398,10 +399,15 @@ async def cmd_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     if not user or not update.message:
         return
-    now_cn = datetime.now(timezone(timedelta(hours=8)))
+    home = await get_home_world()
+    own_city = str(home.get("ying_city") or "东京")
+    own_time = datetime.fromisoformat(home["tokyo_time"])
+    beijing_time = datetime.fromisoformat(home["zhengzhou_time"])
     await audit("telegram", user.id, "/time", True)
     await update.message.reply_text(
-        "现在是北京时间 " + now_cn.strftime("%Y-%m-%d %H:%M:%S") + "。"
+        "萤的时间\n"
+        f"{own_city}：{own_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"北京时间：{beijing_time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
 
@@ -481,11 +487,53 @@ async def cmd_status(
         "off"
     )
 
+    state = await build_live2d_state()
+    home = await get_home_world()
+    life = state.get("life") or {}
+    emotion = state.get("emotion") or {}
+    world = state.get("world") or {}
+    wardrobe = state.get("wardrobe") or {}
+
+    activity_zh = {
+        "shopping": "逛街", "idle": "休息", "resting": "休息",
+        "sleeping": "睡觉", "eating": "吃东西", "cooking": "做饭",
+        "gaming": "玩游戏", "reading": "看书", "watching": "看东西",
+        "walking": "散步", "working": "忙事情", "chatting": "聊天",
+        "cleaning": "收拾房间", "showering": "洗澡",
+    }.get(str(life.get("activity") or ""), "陪着你")
+    mood_zh = {
+        "neutral": "平静", "happy": "开心", "calm": "平静",
+        "sad": "难过", "angry": "生气", "tired": "困倦",
+        "sleepy": "困了", "excited": "兴奋", "shy": "害羞",
+        "upset": "不开心",
+    }.get(str(emotion.get("mood") or "").lower(), str(emotion.get("mood") or "平静"))
+    place_zh = {
+        "nearby_store": "附近商店", "home": "家里", "bedroom": "卧室",
+        "living_room": "客厅", "kitchen": "厨房", "outside": "外面",
+        "store": "商店", "desk": "书桌边",
+    }.get(str(world.get("place") or ""), "家里")
+    sleeping = life.get("sleep_state") == "sleeping"
+    try:
+        energy = f"{round(float(life.get('energy')) * 100)}%"
+    except Exception:
+        energy = "—"
+    own_city = str(home.get("ying_city") or "东京")
+    own_time = datetime.fromisoformat(home["tokyo_time"])
+    beijing_time = datetime.fromisoformat(home["zhengzhou_time"])
+
     await update.message.reply_text(
-        "萤运行正常。\n"
+        "萤 · 当前状态\n\n"
+        f"状态：{'睡着了' if sleeping else '醒着'}\n"
+        f"正在做：{activity_zh}\n"
+        f"心情：{mood_zh}\n"
+        f"精力：{energy}\n"
+        f"位置：{place_zh}\n"
+        f"穿着：{wardrobe.get('outfit_desc') or '当前衣服'}\n\n"
         f"隐私模式：{mode}\n"
-        f"群聊基础参与率："
-        f"{GROUP_REPLY_PROBABILITY:.0%}"
+        f"群聊基础参与率：{GROUP_REPLY_PROBABILITY:.0%}\n\n"
+        "时间\n"
+        f"{own_city}：{own_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
+        f"北京时间：{beijing_time.strftime('%Y-%m-%d %H:%M:%S')}"
     )
 
 
