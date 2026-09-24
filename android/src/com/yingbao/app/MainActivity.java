@@ -13,6 +13,7 @@ import android.view.Gravity;
 import android.view.View;
 import android.view.Window;
 import android.webkit.CookieManager;
+import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
@@ -192,40 +193,58 @@ public class MainActivity extends Activity {
 
     private void showViewer() {
         root.removeAllViews();
-        webView = new WebView(this);
-        WebSettings s = webView.getSettings();
-        s.setJavaScriptEnabled(true);
-        s.setDomStorageEnabled(true);
-        s.setMediaPlaybackRequiresUserGesture(false);
-        s.setAllowFileAccess(false);
-        s.setAllowContentAccess(false);
-        webView.setBackgroundColor(Color.rgb(13,20,37));
-        webView.setWebViewClient(new WebViewClient());
-        webView.setWebChromeClient(new WebChromeClient());
-        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, false);
-
-        root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
-
-        overlayButton = new Button(this);
-        overlayButton.setText(OverlayService.isRunning() ? "收起悬浮" : "悬浮");
-        overlayButton.setAlpha(0.78f);
-        overlayButton.setTextSize(12);
-        FrameLayout.LayoutParams op = new FrameLayout.LayoutParams(dp(92), dp(44));
-        op.gravity = Gravity.TOP | Gravity.RIGHT;
-        op.topMargin = dp(18);
-        op.rightMargin = dp(14);
-        root.addView(overlayButton, op);
-        overlayButton.setOnClickListener(new View.OnClickListener() {
-            @Override public void onClick(View v) { toggleOverlay(); }
-        });
-
+        setupWebView();
         webView.loadUrl(NetConfig.getBase(this) + "/viewer");
+    }
+
+    private void setupWebView() {
+        webView = new WebView(this);
+        WebSettings ws = webView.getSettings();
+        ws.setJavaScriptEnabled(true);
+        ws.setDomStorageEnabled(true);
+        ws.setLoadsImagesAutomatically(true);
+        ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
+        CookieManager.getInstance().setAcceptCookie(true);
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
+        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebViewClient(new WebViewClient());
+        webView.addJavascriptInterface(new NativeBridge(), "YingbaoNative");
+        root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    private class NativeBridge {
+        @JavascriptInterface
+        public void toggleOverlay() {
+            runOnUiThread(() -> MainActivity.this.toggleOverlay());
+        }
+
+        @JavascriptInterface
+        public boolean overlayRunning() {
+            return OverlayService.isRunning();
+        }
+
+        @JavascriptInterface
+        public void resizeOverlay(int delta) {
+            if (!OverlayService.isRunning()) return;
+            Intent i = new Intent(MainActivity.this, OverlayService.class);
+            i.setAction(OverlayService.ACTION_RESIZE);
+            i.putExtra("delta", delta);
+            startService(i);
+        }
+
+        @JavascriptInterface
+        public void refreshOverlayAppearance() {
+            if (!OverlayService.isRunning()) return;
+            Intent i = new Intent(MainActivity.this, OverlayService.class);
+            i.setAction(OverlayService.ACTION_REFRESH_APPEARANCE);
+            startService(i);
+        }
     }
 
     private void toggleOverlay() {
         if (OverlayService.isRunning()) {
             stopService(new Intent(this, OverlayService.class));
-            overlayButton.setText("悬浮");
+            if (overlayButton != null) overlayButton.setText("开启桌面精灵");
             return;
         }
         if (!Settings.canDrawOverlays(this)) {
@@ -249,7 +268,7 @@ public class MainActivity extends Activity {
         i.setAction(OverlayService.ACTION_START);
         if (Build.VERSION.SDK_INT >= 26) startForegroundService(i);
         else startService(i);
-        if (overlayButton != null) overlayButton.setText("收起悬浮");
+        if (overlayButton != null) overlayButton.setText("收起桌面精灵");
     }
     @Override
     protected void onResume() {
@@ -257,6 +276,9 @@ public class MainActivity extends Activity {
         if (waitingOverlayPermission && Settings.canDrawOverlays(this)) {
             waitingOverlayPermission = false;
             startOverlay();
+        }
+        if (overlayButton != null) {
+            overlayButton.setText(OverlayService.isRunning() ? "收起桌面精灵" : "开启桌面精灵");
         }
     }
 
