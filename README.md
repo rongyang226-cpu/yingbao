@@ -2,9 +2,9 @@
 
 ## 📦 直接下载 APK
 
-[**点击下载 莹宝 v0.1.0**](./dist/Yingbao-v0.1.0.apk)
+[**点击下载 莹宝 v0.1.0**](https://github.com/rongyang226-cpu/yingbao/releases/latest/download/Yingbao.apk)
 
-> 如果 GitHub App 里没有直接下载，请点文件后选择 Download。
+> 这是 GitHub Release 附件链接，点击后直接下载 APK，不会打开二进制预览。
 
 莹宝是“萤”的 Android 手机端入口。
 

@@ -1,0 +1,24 @@
+name: Release Yingbao APK
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare release asset
+        run: cp dist/Yingbao-v0.1.0.apk Yingbao.apk
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}"             Yingbao.apk             --title "莹宝 ${GITHUB_REF_NAME}"             --notes "莹宝 Android 测试版。点击 Assets 下的 Yingbao.apk 直接下载。"
