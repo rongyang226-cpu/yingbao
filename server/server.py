@@ -142,8 +142,10 @@ async def weather_search(
     await _auth(ying_device, ying_session)
     try:
         return JSONResponse(await search_city(q))
-    except Exception:
-        raise HTTPException(status_code=503, detail="weather_service_unavailable")
+    except Exception as exc:
+        from app.live2d.mobile_event_log import record_event
+        record_event("天气错误", "城市搜索失败", error=exc)
+        raise HTTPException(status_code=503, detail="城市搜索暂时不可用")
 
 @app.get("/api/mobile/weather")
 async def weather_current(
@@ -154,10 +156,14 @@ async def weather_current(
     await _auth(ying_device, ying_session)
     try:
         return JSONResponse(await current_weather(lat, lon, tz))
-    except ValueError:
-        raise HTTPException(status_code=400, detail="invalid_location")
-    except Exception:
-        raise HTTPException(status_code=503, detail="weather_service_unavailable")
+    except ValueError as exc:
+        from app.live2d.mobile_event_log import record_event
+        record_event("天气错误", "天气查询位置无效", error=exc)
+        raise HTTPException(status_code=400, detail="城市位置无效")
+    except Exception as exc:
+        from app.live2d.mobile_event_log import record_event
+        record_event("天气错误", "实时天气获取失败", error=exc)
+        raise HTTPException(status_code=503, detail="天气暂时不可用")
 
 
 @app.get("/api/mobile/appearance")
@@ -180,7 +186,7 @@ async def mobile_appearance_set(
             person["person_id"], pose=req.pose, outfit=req.outfit, scale=req.scale
         )
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
+        raise HTTPException(status_code=400, detail={"invalid_pose":"姿态不支持","invalid_outfit":"衣服不支持"}.get(str(exc),"外观设置无效"))
     return JSONResponse(result)
 
 
