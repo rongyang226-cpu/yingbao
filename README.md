@@ -2,61 +2,40 @@
 
 ## 📦 直接下载 APK
 
-[**点击下载 莹宝 v0.1.0**](https://github.com/rongyang226-cpu/yingbao/releases/latest/download/Yingbao.apk)
+[**点击下载 莹宝 2.0**](https://github.com/rongyang226-cpu/yingbao/releases/latest/download/Yingbao.apk)
 
-> 这是 GitHub Release 附件链接，点击后直接下载 APK，不会打开二进制预览。
+GitHub Release 附件，文件名固定为 Yingbao.apk。
 
 莹宝是“萤”的 Android 手机端入口。
 
-## 现在有什么
+## 2.0
 
 - Android 原生客户端
-- 首次输入专属密钥并绑定设备
-- 一台设备对应一个人物身份
-- OWNER 沿用现有萤的人物关系与长期记忆
-- 其他用户拥有各自独立的人物画像与聊天记忆
-- 手机端聊天复用 VPS 上现有的萤核心
-- 轻戳萤触发即时文字反应
-- 长按萤进入聊天
-- 大约每 4.5～5.5 分钟出现一次状态气泡
-- Android 系统悬浮窗
-- HTTPS 连接 VPS
+- 专属密钥首次绑定设备
+- OWNER 沿用现有身份、关系与长期记忆
+- 其他用户拥有独立人物画像与记忆
+- 手机端聊天复用 VPS 上的萤核心
+- 国内网络兼容：nip.io / sslip.io / 裸 IP HTTPS 三级自动切换，域名 DNS 失败时仍可直连 VPS
+- 原比例二次元人物悬浮模型，不做 Q 版
+- 透明悬浮窗，无黑色底板
+- 人物本体可拖动
+- 双指整体等比例缩放，头身比例不变
+- 轻点人物触发“戳一戳”
+- 长按人物打开聊天
+- 状态气泡约每 4.5～5.5 分钟自然出现
 
-## 下载
+当前版本：2.0.0
 
-仓库里的 `dist/Yingbao-v0.1.0.apk` 是当前测试版 APK。
-
-当前版本：`0.1.0`
-
-包名：`com.yingbao.app`
+包名：com.yingbao.app
 
 最低系统：Android 8.0
 
-## Live2D 状态
+## 模型状态
 
-客户端和 VPS 的 Live2D 状态桥已经接好，但正式 Cubism 模型资源尚未加入。
+2.0 已包含可实际显示和交互的透明 2D 人物资源。
 
-当前仓库不包含 `.model3.json`、纹理和 Cubism 工程文件。
+正式 Cubism Live2D（model3.json / moc3 / physics / 分层纹理）仍未制作，因此当前 2D 悬浮人物不冒充 Cubism 模型。后续可直接替换为正式 Cubism 资源。
 
 ## 安全
 
-这个公开仓库不会包含以下内容：
-
-- VPS 的 `.env`
-- DeepSeek API Key
-- Telegram Bot Token
-- 10 把用户密钥
-- SQLite 数据库
-- 人物记忆
-- VPS SSH 私钥
-- APK 签名私钥
-
-这些私密数据只保存在 VPS。
-
-## 目录
-
-- `android/` Android 客户端源码
-- `scripts/build.sh` 无 Gradle 的轻量构建脚本
-- `dist/` 已签名测试 APK
-
-> 这是项目早期测试版本，接口和 UI 仍会继续调整。
+公开仓库不包含 VPS 密钥、API Key、Bot Token、10 把用户密钥、数据库、人物记忆、SSH 私钥或 APK 签名私钥。

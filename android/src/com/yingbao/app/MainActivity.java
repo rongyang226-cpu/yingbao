@@ -34,7 +34,6 @@ import java.util.List;
 import java.util.Map;
 
 public class MainActivity extends Activity {
-    private static final String BASE = "https://38-76-190-23.sslip.io";
     private FrameLayout root;
     private WebView webView;
     private String deviceId;
@@ -56,6 +55,7 @@ public class MainActivity extends Activity {
             getContentResolver(), Settings.Secure.ANDROID_ID
         );
         CookieManager.getInstance().setAcceptCookie(true);
+        NetConfig.syncExistingCookies();
 
         root = new FrameLayout(this);
         setContentView(root);
@@ -219,7 +219,7 @@ public class MainActivity extends Activity {
             @Override public void onClick(View v) { toggleOverlay(); }
         });
 
-        webView.loadUrl(BASE + "/viewer");
+        webView.loadUrl(NetConfig.getBase(this) + "/viewer");
     }
 
     private void toggleOverlay() {
@@ -268,54 +268,63 @@ public class MainActivity extends Activity {
     }
 
     private int request(String method, String path, String body, boolean captureCookies) {
-        HttpURLConnection c = null;
-        try {
-            URL u = new URL(BASE + path);
-            c = (HttpURLConnection)u.openConnection();
-            c.setRequestMethod(method);
-            c.setConnectTimeout(12000);
-            c.setReadTimeout(30000);
-            c.setUseCaches(false);
-            c.setRequestProperty("Accept", "application/json");
+        for (String base : NetConfig.ordered(this)) {
+            HttpURLConnection c = null;
+            try {
+                URL u = new URL(base + path);
+                c = (HttpURLConnection)u.openConnection();
+                c.setRequestMethod(method);
+                c.setConnectTimeout(7000);
+                c.setReadTimeout(25000);
+                c.setUseCaches(false);
+                c.setRequestProperty("Accept", "application/json");
 
-            String cookies = CookieManager.getInstance().getCookie(BASE);
-            if (cookies != null && !cookies.isEmpty()) {
-                c.setRequestProperty("Cookie", cookies);
-            }
-            if (body != null) {
-                c.setDoOutput(true);
-                c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
-                byte[] data = body.getBytes(StandardCharsets.UTF_8);
-                c.setFixedLengthStreamingMode(data.length);
-                OutputStream out = c.getOutputStream();
-                out.write(data);
-                out.close();
-            }
+                String cookies = CookieManager.getInstance().getCookie(base);
+                if (cookies != null && !cookies.isEmpty()) {
+                    c.setRequestProperty("Cookie", cookies);
+                }
+                if (body != null) {
+                    c.setDoOutput(true);
+                    c.setRequestProperty("Content-Type", "application/json; charset=utf-8");
+                    byte[] data = body.getBytes(StandardCharsets.UTF_8);
+                    c.setFixedLengthStreamingMode(data.length);
+                    OutputStream out = c.getOutputStream();
+                    out.write(data);
+                    out.close();
+                }
 
-            int code = c.getResponseCode();
-            if (captureCookies) {
-                for (Map.Entry<String, List<String>> e : c.getHeaderFields().entrySet()) {
-                    if (e.getKey() != null && "Set-Cookie".equalsIgnoreCase(e.getKey())) {
-                        for (String cookie : e.getValue()) {
-                            CookieManager.getInstance().setCookie(BASE, cookie);
+                int code = c.getResponseCode();
+
+                if (captureCookies) {
+                    for (Map.Entry<String, List<String>> e : c.getHeaderFields().entrySet()) {
+                        if (e.getKey() != null && "Set-Cookie".equalsIgnoreCase(e.getKey())) {
+                            for (String cookie : e.getValue()) {
+                                NetConfig.mirrorCookie(cookie);
+                            }
                         }
                     }
                 }
-                CookieManager.getInstance().flush();
-            }
 
-            InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
-            if (in != null) {
-                byte[] buffer = new byte[1024];
-                while (in.read(buffer) != -1) { }
-                in.close();
+                InputStream in = code >= 400 ? c.getErrorStream() : c.getInputStream();
+                if (in != null) {
+                    byte[] buffer = new byte[1024];
+                    while (in.read(buffer) != -1) { }
+                    in.close();
+                }
+
+                if (code == 401 && "/api/mobile/whoami".equals(path)) {
+                    continue;
+                }
+
+                NetConfig.saveBase(this, base);
+                return code;
+            } catch (Exception ignored) {
+                // Try the next HTTPS endpoint.
+            } finally {
+                if (c != null) c.disconnect();
             }
-            return code;
-        } catch (Exception e) {
-            return -1;
-        } finally {
-            if (c != null) c.disconnect();
         }
+        return -1;
     }
 
     @Override
