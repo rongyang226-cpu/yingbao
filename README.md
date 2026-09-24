@@ -39,3 +39,11 @@ GitHub Release 附件，文件名固定为 Yingbao.apk。
 ## 安全
 
 公开仓库不包含 VPS 密钥、API Key、Bot Token、10 把用户密钥、数据库、人物记忆、SSH 私钥或 APK 签名私钥。
+
+## v2.1.0
+- VPS raw-IP direct connection is now the first Android route, with an app-pinned HTTPS certificate; DNS domains remain fallback routes.
+- Mobile long-term-memory extraction is deferred so it no longer blocks the visible reply.
+- DeepSeek HTTP connections are reused to reduce repeated connection setup latency.
+- Life/sleep clock is normalized to the shared UTC+8 timeline.
+- Character artwork is bundled locally for the floating-window/model fallback.
+- Access keys keep permanent first-device binding semantics.

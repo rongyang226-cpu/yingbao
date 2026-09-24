@@ -3,7 +3,7 @@
     <base-config cleartextTrafficPermitted="false">
         <trust-anchors>
             <certificates src="system" />
-            <certificates src="@raw/yingbao_ip" />
+            <certificates src="@raw/yingbao_ip_cert" />
         </trust-anchors>
     </base-config>
 </network-security-config>

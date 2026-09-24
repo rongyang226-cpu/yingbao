@@ -8,9 +8,9 @@ import java.util.List;
 
 public final class NetConfig {
     public static final String[] BASES = new String[] {
+        "https://38.76.190.23",
         "https://38-76-190-23.nip.io",
-        "https://38-76-190-23.sslip.io",
-        "https://38.76.190.23"
+        "https://38-76-190-23.sslip.io"
     };
 
     private static final String PREFS = "yingbao_net";
@@ -31,10 +31,13 @@ public final class NetConfig {
     }
 
     public static String[] ordered(Context c) {
+        // Always retry the raw VPS IP first on every app start/request.
+        // This avoids waiting on DNS when Chinese networks block or delay dynamic DNS domains.
         String active = getBase(c);
         List<String> out = new ArrayList<>();
-        out.add(active);
-        for (String b : BASES) if (!b.equals(active)) out.add(b);
+        out.add(BASES[0]);
+        if (!active.equals(BASES[0])) out.add(active);
+        for (String b : BASES) if (!out.contains(b)) out.add(b);
         return out.toArray(new String[0]);
     }
 
