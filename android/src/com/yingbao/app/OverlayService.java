@@ -43,6 +43,8 @@ import java.util.Random;
 public class OverlayService extends Service {
     public static final String ACTION_START = "com.yingbao.app.START_OVERLAY";
     public static final String ACTION_REFRESH_APPEARANCE = "com.yingbao.app.REFRESH_OVERLAY_APPEARANCE";
+    public static final String ACTION_HIDE_IN_APP = "com.yingbao.app.HIDE_IN_APP";
+    public static final String ACTION_SHOW_ON_DESKTOP = "com.yingbao.app.SHOW_ON_DESKTOP";
     public static final String ACTION_RESIZE = "com.yingbao.app.RESIZE_OVERLAY";
     private static volatile boolean running = false;
 
@@ -58,14 +60,13 @@ public class OverlayService extends Service {
     private ScaleGestureDetector scaleDetector;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final Random random = new Random();
-    private static final String[] LOCAL_REACTIONS = new String[]{
-        "嗯？","干嘛呀","又戳我。","唔…","我在呢。","看着你呢。","别戳脸…","痒。","知道啦。","你很闲嘛…",
-        "轻一点。","喂。","怎么啦？","我听着。","戳到了。","再戳？","哼。","有事就说。","在看你。","别闹。",
-        "嗯哼？","被你发现了。","干什么嘛。","我没跑。","好啦好啦。","手拿开。","你故意的吧。","又是你。","我知道是你。","别一直点。",
-        "唔嗯。","有点痒…","你想干嘛？","我在这。","看到你了。","别戳头发。","裙子别碰。","真拿你没办法。","一下就好。","还来？",
-        "嗯——？","我回头了。","听到了。","别催嘛。","好，我看你。","怎么这么爱戳。","被戳到了。","小心一点。","我没生气。","就一下哦。"
+    private static final String[][] TOUCH_REACTIONS = new String[][]{
+        {"头顶被你碰到了。","轻一点嘛。","嗯？摸摸头？","今天的头发还整齐吗？","突然靠这么近。","我有在听。","不许揉乱刘海。","再摸一下也可以。","你在数发卡吗？","唔，发现你了。","头顶暖暖的。","这算打招呼吗？","我抬头看你了。","你又来摸头。","偷偷点我头顶？","怎么啦，想聊天？","好啦，我知道你在。","嗯哼，收到。","别把我当按钮呀。","我轻轻点头啦。"},
+        {"头发会被弄乱的。","风刚吹过这里。","你看到发梢了吗？","长发有点难打理。","小心缠到手指。","这缕发丝不听话。","你在帮我梳头吗？","轻轻碰就好。","发尾好像在飘。","黑发里藏着光呢。","别拉我的头发啦。","今天披着头发。","你摸到的是发梢。","风把头发吹向你了。","我来理一理。","发丝痒痒的。","你觉得这个发型怎样？","等一下，我把它拨开。","好啦，顺了。","这是我的长头发呀。"},
+        {"要牵手吗？","手心有点暖。","你碰到我的手了。","先别急，我在。","嗯，把手给我。","手指轻轻动了一下。","你是在叫我吗？","我握一下就松开。","碰到了哦。","今天也一起待着吧。","别偷偷戳我的手。","我听见你了。","这边是我的手呀。","你手好暖。","再打个招呼？","嗯，我回应你。","轻轻握住就好。","小手也会怕痒。","让我看看你在做什么。","我就在这里。"},
+        {"裙摆要飘起来了。","这层薄纱很轻。","别踩到裙边哦。","你在看裙子的褶吗？","裙角刚晃了一下。","轻一点，纱会皱。","风吹起了裙摆。","这一层像小云朵。","裙边擦过你的手。","我提一下裙摆。","白色的纱好看吗？","裙摆在轻轻摇。","你摸到外层薄纱了。","下摆有很多层呢。","慢一点，别扯到。","刚才裙角动了。","像被风碰了一下。","要看看裙子的纹路吗？","我把裙边理好了。","你又盯着裙摆看。"},
+        {"鞋尖碰到你啦。","小心别踩到我。","我往旁边挪一步。","脚步轻轻的。","这双鞋有点亮。","你在看鞋带吗？","站稳啦。","鞋跟轻轻点地。","我还在这里。","要一起散步吗？","脚边有风。","再往前走一步？","这边是鞋尖。","我换个重心。","别挠脚边，好痒。","裙摆快碰到鞋了。","我轻轻踏了一下。","鞋带好好系着呢。","你在叫我走过去吗？","慢慢走就好。"}
     };
-
     private int modelWidthDp = 140;
     private boolean moved = false;
     private boolean scaling = false;
@@ -91,6 +92,9 @@ public class OverlayService extends Service {
             resizeOverlay(intent.getIntExtra("delta", 0));
         }
         if (intent != null && ACTION_REFRESH_APPEARANCE.equals(intent.getAction())) refreshAppearance();
+        if (intent != null && ACTION_HIDE_IN_APP.equals(intent.getAction()) && overlayView != null) { overlayView.setVisibility(View.GONE); hideBubbleRunnable.run(); }
+        if (intent != null && ACTION_SHOW_ON_DESKTOP.equals(intent.getAction()) && overlayView != null) overlayView.setVisibility(View.VISIBLE);
+        if (intent != null && ACTION_START.equals(intent.getAction()) && overlayView != null) overlayView.setVisibility(View.GONE);
         return START_STICKY;
     }
 
@@ -275,7 +279,7 @@ public class OverlayService extends Service {
                 if (moved) settlePet();
                 if (e.getActionMasked() == MotionEvent.ACTION_UP && !moved && !scaling && !longTriggered) {
                     if (quickMenu != null && quickMenu.getVisibility() == View.VISIBLE) hideQuickMenu();
-                    else poke();
+                    else poke(e.getX(), e.getY());
                 }
                 return true;
         }
@@ -318,7 +322,7 @@ public class OverlayService extends Service {
         startActivity(i);
     }
 
-    private void poke() {
+    private void poke(float x, float y) {
         lastPokeTime = android.os.SystemClock.uptimeMillis();
         // Local tactile feedback must never wait for network.
         long duration = random.nextBoolean() ? 500L : 800L;
@@ -338,7 +342,13 @@ public class OverlayService extends Service {
                         .start();
                 }).start();
         }
-        showBubble(LOCAL_REACTIONS[random.nextInt(LOCAL_REACTIONS.length)], 2600);
+        float nx = x / Math.max(1, overlayView.getWidth());
+        float ny = y / Math.max(1, overlayView.getHeight());
+        int zone = ny < .33f && nx > .29f && nx < .72f ? 0 :
+            ny < .59f && (nx < .34f || nx > .69f) ? 1 :
+            ny < .59f ? 2 : ny > .88f && nx > .33f && nx < .68f ? 4 : 3;
+        String[] choices = TOUCH_REACTIONS[zone];
+        showBubble(choices[random.nextInt(choices.length)], 2600);
     }
 
     private void refreshAppearance() {

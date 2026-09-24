@@ -194,7 +194,7 @@ public class MainActivity extends Activity {
     private void showViewer() {
         root.removeAllViews();
         setupWebView();
-        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=250");
+        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=260");
     }
 
     private void setupWebView() {
@@ -278,8 +278,23 @@ public class MainActivity extends Activity {
         if (overlayButton != null) overlayButton.setText("收起桌面精灵");
     }
     @Override
+    protected void onPause() {
+        super.onPause();
+        if (OverlayService.isRunning()) {
+            Intent intent = new Intent(this, OverlayService.class);
+            intent.setAction(OverlayService.ACTION_SHOW_ON_DESKTOP);
+            startService(intent);
+        }
+    }
+
+    @Override
     protected void onResume() {
         super.onResume();
+        if (OverlayService.isRunning()) {
+            Intent intent = new Intent(this, OverlayService.class);
+            intent.setAction(OverlayService.ACTION_HIDE_IN_APP);
+            startService(intent);
+        }
         if (waitingOverlayPermission && Settings.canDrawOverlays(this)) {
             waitingOverlayPermission = false;
             startOverlay();
