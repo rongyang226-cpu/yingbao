@@ -137,7 +137,8 @@ public class OverlayService extends Service {
         overlayView.setBackgroundColor(Color.TRANSPARENT);
 
         modelView = new ImageView(this);
-        modelView.setImageResource(R.drawable.yingbao_model);
+        modelView.setImageResource(getSharedPreferences("ying_overlay", MODE_PRIVATE).getBoolean("hd_art", true)
+            ? R.drawable.yingbao_model_hd : R.drawable.yingbao_model);
         modelView.setAdjustViewBounds(true);
         modelView.setScaleType(ImageView.ScaleType.FIT_CENTER);
         modelView.setBackgroundColor(Color.TRANSPARENT);
@@ -341,6 +342,10 @@ public class OverlayService extends Service {
     }
 
     private void refreshAppearance() {
+        if (getSharedPreferences("ying_overlay", MODE_PRIVATE).getBoolean("hd_art", true)) {
+            handler.post(() -> { if (modelView != null) modelView.setImageResource(R.drawable.yingbao_model_hd); });
+            return;
+        }
         new Thread(() -> {
             String pose = "stand";
             String outfit = "moon";

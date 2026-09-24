@@ -194,7 +194,7 @@ public class MainActivity extends Activity {
     private void showViewer() {
         root.removeAllViews();
         setupWebView();
-        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=240");
+        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=250");
     }
 
     private void setupWebView() {
@@ -231,6 +231,12 @@ public class MainActivity extends Activity {
             i.setAction(OverlayService.ACTION_RESIZE);
             i.putExtra("delta", delta);
             startService(i);
+        }
+
+        @JavascriptInterface
+        public void setPetArt(boolean hd) {
+            getSharedPreferences("ying_overlay", MODE_PRIVATE).edit().putBoolean("hd_art", hd).apply();
+            refreshOverlayAppearance();
         }
 
         @JavascriptInterface
