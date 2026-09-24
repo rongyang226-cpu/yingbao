@@ -194,7 +194,7 @@ public class MainActivity extends Activity {
     private void showViewer() {
         root.removeAllViews();
         setupWebView();
-        webView.loadUrl(NetConfig.getBase(this) + "/viewer");
+        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=240");
     }
 
     private void setupWebView() {
@@ -202,6 +202,7 @@ public class MainActivity extends Activity {
         WebSettings ws = webView.getSettings();
         ws.setJavaScriptEnabled(true);
         ws.setDomStorageEnabled(true);
+        ws.setCacheMode(WebSettings.LOAD_NO_CACHE);
         ws.setLoadsImagesAutomatically(true);
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptCookie(true);
