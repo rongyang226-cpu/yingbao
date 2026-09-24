@@ -1,0 +1,29 @@
+# Secrets
+.env
+*.jks
+*.keystore
+*.pem
+*.key
+*token*
+*secret*
+mobile_access_keys.json
+
+# Private data
+*.db
+*.sqlite
+*.sqlite3
+memory/
+memories/
+data/
+
+# Android build output
+build/
+android/build/
+*.apks
+*.idsig
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
