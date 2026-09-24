@@ -6,13 +6,15 @@ import logging
 from datetime import datetime, timezone, timedelta
 
 from app.config import TELEGRAM_OWNER_ID
-from app.db import save_message, get_history, reset_private_chat_history
+from app.db import save_message, get_person_private_history, reset_private_chat_history
 from app.brain.deepseek import chat as deepseek_chat
 from app.router.dispatcher import dispatch
 from app.context.builder import build_context, render_context
 from app.social.state_engine import register_interaction
 from app.social.interaction_events import apply_interaction_signals
+from app.social.profile_observer import observe_message
 from app.memory.extractor import extract_memory_candidates
+from app.memory.episodic import add_episode
 from app.context.topic_tracker import observe_topic
 from app.activity.attention import focus_on_conversation
 from app.activity.life_state import get_life_state
@@ -51,6 +53,20 @@ async def mobile_chat(text: str, person: dict) -> dict:
     display_name = person.get("display_name") or "新朋友"
     role = str(person.get("person_role") or person.get("role") or "USER")
     chat_id = _chat_id(person_id)
+
+    # OWNER 在 TG 私聊与软件聊天中是同一人物、同一关系、同一记忆。
+    # 软件打开聊天页只代表从桌宠“面对面”切换到手机聊天，不创建第二个萤。
+    canonical_private_chat_id = (
+        str(TELEGRAM_OWNER_ID)
+        if role == "OWNER" and TELEGRAM_OWNER_ID
+        else chat_id
+    )
+    canonical_memory_platform = (
+        "telegram"
+        if role == "OWNER" and TELEGRAM_OWNER_ID
+        else "mobile"
+    )
+
     command = text.split(None, 1)[0].lower()
     args = text.split(None, 1)[1].strip() if len(text.split(None, 1)) > 1 else ""
     if command == "/start":
@@ -156,6 +172,13 @@ async def mobile_chat(text: str, person: dict) -> dict:
         record_event("聊天错误", "同步萤的专注状态失败，已继续处理消息", error=exc)
 
     try:
+        await observe_message(
+            person_id=person_id,
+            platform=canonical_memory_platform,
+            chat_id=canonical_private_chat_id,
+            text=text,
+            is_reply=False,
+        )
         await register_interaction(
             person_id=person_id,
             source_platform="mobile",
@@ -168,26 +191,34 @@ async def mobile_chat(text: str, person: dict) -> dict:
             source_message_id=message_id, text=text,
         )
         await observe_topic(
-            person_id=person_id, platform="mobile",
-            chat_id=chat_id, text=text,
+            person_id=person_id,
+            platform=canonical_memory_platform,
+            chat_id=canonical_private_chat_id,
+            text=text,
         )
         await extract_memory_candidates(
-            person_id, text, platform="mobile",
-            chat_id=chat_id, message_id=message_id,
+            person_id,
+            text,
+            platform=canonical_memory_platform,
+            chat_id=canonical_private_chat_id,
+            message_id=message_id,
         )
     except Exception as exc:
         record_event("聊天错误", "更新互动、话题或记忆失败，已继续回复", error=exc)
 
-    # 当前消息已经单独作为本轮 text 传给模型；历史里必须排除它，避免 AI 看见两份相同消息。
-    history = await get_history(
-        "mobile", chat_id, 20,
+    # TG 私聊与软件聊天使用同一人物的统一最近历史。
+    # 当前消息仍单独作为本轮 text 传给模型，因此这里排除本条。
+    history = await get_person_private_history(
+        person_id,
+        20,
+        exclude_platform="mobile",
         exclude_message_id=message_id,
     )
     route = await dispatch(
         text=text,
         person_id=person_id,
-        current_chat_id=chat_id,
-        platform="mobile",
+        current_chat_id=canonical_private_chat_id,
+        platform="shared_private",
         current_message_id=message_id,
     )
 
@@ -195,11 +226,7 @@ async def mobile_chat(text: str, person: dict) -> dict:
         answer = str(route.answer).strip()
     else:
         system_prompt = PERSONA_FILE.read_text(encoding="utf-8").strip()
-        ctx_chat_id = (
-            str(TELEGRAM_OWNER_ID)
-            if role == "OWNER" and TELEGRAM_OWNER_ID
-            else chat_id
-        )
+        ctx_chat_id = canonical_private_chat_id
         runtime_context = await build_context(
             person={
                 "person_id": person_id,
@@ -216,11 +243,13 @@ async def mobile_chat(text: str, person: dict) -> dict:
         now_cn = datetime.now(timezone(timedelta(hours=8)))
         system_prompt += (f"\n\n【当前真实时间】\n- 北京时间/Asia/Shanghai：{now_cn.strftime('%Y-%m-%d %H:%M:%S')}。\n" "- 所有时间判断必须以这个时间为准，不得根据模型自身时间猜测。\n")
         system_prompt += (
-            "\n\n【当前入口：莹宝手机端】\n"
-            "- 这是与 Telegram 共用同一核心能力的手机入口。\n"
+            "\n\n【当前场景：软件聊天页】\n"
+            "- 你始终是同一个萤，不存在“TG 的萤”和“软件里的萤”两个个体。\n"
+            "- TG 私聊与软件聊天共用同一人物、关系、长期记忆、近期对话和话题连续性。\n"
+            "- 软件桌面精灵/触碰可理解为面对面相处；打开软件聊天页，相当于从面对面切到手机继续聊天。\n"
+            "- 切换入口不会重置关系或话题；另一端刚说过的话就是你刚刚经历过的同一段对话。\n"
             "- 当前人物身份由 VPS 设备绑定决定，不要把不同人物混在一起。\n"
-            "- OWNER 沿用既有人物与关系；其他人物从各自真实互动逐步建立画像。\n"
-            "- 日常回复自然、简洁，不解释内部数据库或权限实现。"
+            "- 日常回复自然、简洁，不解释内部数据库、平台同步或权限实现。"
         )
         if route.data:
             system_prompt += "\n\n【程序工具结果】\n" + str(route.data)[:7000]
@@ -232,6 +261,21 @@ async def mobile_chat(text: str, person: dict) -> dict:
         "mobile", chat_id, "ying", "萤", "assistant", answer,
         person_id=person_id, message_id=reply_id,
     )
+
+    try:
+        await add_episode(
+            person_id=person_id,
+            platform=canonical_memory_platform,
+            chat_id=canonical_private_chat_id,
+            scene="private",
+            source_message_id=message_id,
+            user_text=text,
+            assistant_text=answer,
+            owner=(role == "OWNER"),
+        )
+    except Exception as exc:
+        record_event("记忆错误", "软件聊天写入共同片段失败，已保留普通聊天记录", error=exc)
+
     # Reply is ready now; slow long-term-memory extraction continues in the background.
     asyncio.create_task(_post_reply_memory(
         person_id=person_id, text=text, chat_id=chat_id, message_id=message_id

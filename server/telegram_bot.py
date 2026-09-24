@@ -26,6 +26,7 @@ from app.config import (
 from app.db import (
     save_message,
     get_history,
+    get_person_private_history,
     reset_private_chat_history,
     get_message_reply_target,
     audit,
@@ -2028,7 +2029,7 @@ async def handle_text(
         return
 
     # 严格隐私：
-    # 不读取普通历史
+    # 不读取普通持久化历史，只使用当前临时会话。
     if mode == "strict":
         history = PRIVATE_CONTEXT.get(
             (chat.id, user.id),
@@ -2036,14 +2037,21 @@ async def handle_text(
         )
 
     # 普通隐私：
-    # 可以读取以前的普通历史，
-    # 但本次内容不落盘
+    # 私聊仍读取同一人物跨 TG / 软件的统一历史，
+    # 但本次内容不落盘。
     elif mode == "on":
-        history = await get_history(
-            "telegram",
-            chat.id,
-            20
-        )
+        if is_group:
+            history = await get_history(
+                "telegram",
+                chat.id,
+                20,
+                focus_user_id=speaker_user_id,
+            )
+        else:
+            history = await get_person_private_history(
+                person["person_id"],
+                20,
+            )
 
         history += PRIVATE_CONTEXT.get(
             (chat.id, user.id),
@@ -2052,13 +2060,21 @@ async def handle_text(
 
     # 正常模式
     else:
-        history = await get_history(
-            "telegram",
-            chat.id,
-            20,
-            exclude_message_id=message.message_id,
-            focus_user_id=(speaker_user_id if is_group else None),
-        )
+        if is_group:
+            history = await get_history(
+                "telegram",
+                chat.id,
+                20,
+                exclude_message_id=message.message_id,
+                focus_user_id=speaker_user_id,
+            )
+        else:
+            history = await get_person_private_history(
+                person["person_id"],
+                20,
+                exclude_platform="telegram",
+                exclude_message_id=message.message_id,
+            )
 
     try:
         system_prompt = load_persona()
@@ -2188,7 +2204,7 @@ async def handle_text(
                 text=text,
                 person_id=person["person_id"],
                 current_chat_id=chat.id,
-                platform="telegram",
+                platform=("telegram" if is_group else "shared_private"),
                 restrict_chat_id=(chat.id if is_group else None),
                 current_message_id=message.message_id,
             )
@@ -2566,6 +2582,10 @@ async def handle_text(
         else:
             system_prompt += """
 【当前场景：私聊】
+- 你始终是同一个萤，不存在“TG 的萤”和“软件里的萤”两个个体。
+- TG 私聊与软件聊天共用同一人物、关系、长期记忆、近期对话和话题连续性。
+- 软件桌宠/触碰可理解为面对面相处；软件聊天页与 TG 私聊都只是换到手机继续聊。
+- 从软件切到 TG、或从 TG 切回软件，都不重置话题；另一端刚发生的事就是你刚刚经历过的同一段连续互动。
 - 像真实即时聊天，不像客服、答题机器或写作文。
 - 回复长度完全根据当前语境决定。
 - 简单的话可以很短，复杂或重要的话可以认真展开。
