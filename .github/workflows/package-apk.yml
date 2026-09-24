@@ -1,0 +1,22 @@
+name: Package Yingbao APK
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "dist/Yingbao-v0.1.0.apk"
+      - ".github/workflows/package-apk.yml"
+  workflow_dispatch:
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Yingbao-v0.1.0
+          path: dist/Yingbao-v0.1.0.apk
+          if-no-files-found: error
+          retention-days: 30
