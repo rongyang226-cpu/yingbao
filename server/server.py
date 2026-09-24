@@ -275,6 +275,7 @@ def _game_summary(path: Path) -> dict:
         raise ValueError("游戏记录未通过验证")
     score = data.get("score")
     winner = data.get("winner") or data.get("result")
+    winner = {"black": "你赢了" if data.get("participants") else "黑方胜", "white": "萤赢了" if data.get("participants") else "白方胜", "draw": "和棋"}.get(winner, winner)
     summary = (f"得分 {score}" if score is not None else f"结果 {winner}" if winner else "已结束")
     return {
         "编号": path.name,
@@ -380,6 +381,181 @@ async def move_mobile_2048(
             record_event("游戏完成", f"手机2048对局结束，共{step}步，得分{game.score}", game="2048", result={"编号": filename})
         path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
         return _mobile2048_response(state)
+
+
+def _together2048_file(person_id: int) -> Path:
+    return MOBILE_2048_DIR / f"{int(person_id)}_2048_together.json"
+
+
+def _together2048_response(state: dict) -> dict:
+    return {**_mobile2048_response(state), "一起玩": True, "最近一步": state.get("last", ""), "你走的步数": sum(m.get("actor") == "你" for m in state["moves"]), "萤走的步数": sum(m.get("actor") == "萤" for m in state["moves"])}
+
+
+@app.get("/api/mobile/games/2048/together/current")
+async def current_together_2048(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    path = _together2048_file(person["person_id"])
+    return _together2048_response(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else {"无对局": True}
+
+
+@app.post("/api/mobile/games/2048/together/start")
+async def start_together_2048(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    from games.real.game2048 import Game2048
+    from app.live2d.mobile_event_log import record_event
+    async with _mobile2048_lock:
+        game = Game2048()
+        state = {"game": "2048", "mode": "real", "participants": ["你", "萤"], "started_at": datetime.now(timezone.utc).isoformat(), "board": game.board, "score": 0, "moves": [], "finished": False, "last": "轮到你"}
+        MOBILE_2048_DIR.mkdir(parents=True, exist_ok=True)
+        _together2048_file(person["person_id"]).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        record_event("一起游戏", "你与萤开始合作玩2048；轮流走棋，真实规则运行在 VPS", game="2048")
+        return _together2048_response(state)
+
+
+@app.post("/api/mobile/games/2048/together/move")
+async def move_together_2048(
+    req: Mobile2048Move,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    if req.direction not in {"left", "right", "up", "down"}:
+        raise HTTPException(status_code=400, detail="移动方向无效")
+    from games.real.game2048 import Game2048, choose_move
+    from app.live2d.mobile_event_log import record_event
+    async with _mobile2048_lock:
+        path = _together2048_file(person["person_id"])
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="请先开始一起玩的对局")
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if state.get("finished"):
+            return _together2048_response(state)
+        game = Game2048.__new__(Game2048)
+        game.board = state["board"]
+        game.score = state["score"]
+        if not game.move(req.direction):
+            return _together2048_response(state)
+        directions = {"left": "左", "right": "右", "up": "上", "down": "下"}
+        def remember(actor: str, direction: str):
+            number = len(state["moves"]) + 1
+            state["moves"].append({"turn": number, "actor": actor, "direction": direction, "score": game.score, "max_tile": game.max_tile(), "board": [row[:] for row in game.board]})
+            record_event("一起游戏", f"第{number}步{actor}向{directions[direction]}移动，合作得分{game.score}", game="2048")
+        remember("你", req.direction)
+        reply = "你向" + directions[req.direction] + "走了一步"
+        if game.can_move() and game.max_tile() < 2048:
+            ai_direction = choose_move(game)
+            if ai_direction and game.move(ai_direction):
+                remember("萤", ai_direction)
+                reply += "；萤接着向" + directions[ai_direction] + "走了一步"
+        state.update(board=game.board, score=game.score, last=reply, finished=not game.can_move() or game.max_tile() >= 2048)
+        if state["finished"]:
+            state.update(ended_at=datetime.now(timezone.utc).isoformat(), move_count=len(state["moves"]), max_tile=game.max_tile(), won=game.max_tile()>=2048, final_board=game.board)
+            GAME_SESSIONS.mkdir(parents=True, exist_ok=True)
+            filename = "2048_together_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + str(person["person_id"]) + ".json"
+            (GAME_SESSIONS / filename).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            state["session"] = filename
+            record_event("一起游戏", f"你与萤的合作局结束，共{len(state['moves'])}步，得分{game.score}", game="2048")
+        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        return _together2048_response(state)
+
+
+_gomoku_lock = asyncio.Lock()
+
+
+def _together_gomoku_file(person_id: int) -> Path:
+    return MOBILE_2048_DIR / f"{int(person_id)}_gomoku_together.json"
+
+
+def _gomoku_response(state: dict) -> dict:
+    return {"棋盘": state["board"], "步数": len(state["moves"]), "结束": bool(state.get("finished")), "胜者": state.get("winner"), "最近一步": state.get("last", ""), "对局编号": state.get("session", ""), "一起玩": True}
+
+
+@app.get("/api/mobile/games/gomoku/together/current")
+async def current_together_gomoku(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    path = _together_gomoku_file(person["person_id"])
+    return _gomoku_response(json.loads(path.read_text(encoding="utf-8"))) if path.exists() else {"无对局": True}
+
+
+@app.post("/api/mobile/games/gomoku/together/start")
+async def start_together_gomoku(
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    from games.real.gomoku import Gomoku
+    from app.live2d.mobile_event_log import record_event
+    async with _gomoku_lock:
+        game = Gomoku()
+        state = {"game": "gomoku", "mode": "real", "participants": {"black": "你", "white": "萤"}, "started_at": datetime.now(timezone.utc).isoformat(), "board": game.board, "moves": [], "finished": False, "winner": None, "last": "你执黑棋先走"}
+        MOBILE_2048_DIR.mkdir(parents=True, exist_ok=True)
+        _together_gomoku_file(person["person_id"]).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        record_event("一起游戏", "你和萤开始五子棋；你执黑棋，萤执白棋", game="五子棋")
+        return _gomoku_response(state)
+
+
+class TogetherGomokuMove(BaseModel):
+    row: int
+    col: int
+
+
+@app.post("/api/mobile/games/gomoku/together/move")
+async def move_together_gomoku(
+    req: TogetherGomokuMove,
+    ying_device: str | None = Cookie(default=None),
+    ying_session: str | None = Cookie(default=None),
+):
+    person = await _game_owner(ying_device, ying_session)
+    from games.real.gomoku import Gomoku, BLACK, WHITE, choose_move
+    from app.live2d.mobile_event_log import record_event
+    async with _gomoku_lock:
+        path = _together_gomoku_file(person["person_id"])
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="请先开始五子棋")
+        state = json.loads(path.read_text(encoding="utf-8"))
+        if state.get("finished"):
+            return _gomoku_response(state)
+        game = Gomoku()
+        game.board = state["board"]
+        game.moves = state["moves"]
+        if not game.place(req.row, req.col, BLACK):
+            raise HTTPException(status_code=400, detail="这里不能落子")
+        game.moves[-1]["actor"] = "你"
+        record_event("一起游戏", f"五子棋第{len(game.moves)}手，你在第{req.row+1}行第{req.col+1}列落黑棋", game="五子棋")
+        description = f"你落在第{req.row+1}行第{req.col+1}列"
+        winner = "black" if game.win(req.row, req.col, BLACK) else None
+        if winner is None and game.available():
+            choice = choose_move(game, WHITE)
+            if choice is not None:
+                row, col = choice
+                game.place(row, col, WHITE)
+                game.moves[-1]["actor"] = "萤"
+                record_event("一起游戏", f"五子棋第{len(game.moves)}手，萤在第{row+1}行第{col+1}列落白棋", game="五子棋")
+                description += f"；萤落在第{row+1}行第{col+1}列"
+                if game.win(row, col, WHITE):
+                    winner = "white"
+        if winner is None and not game.available():
+            winner = "draw"
+        state.update(board=game.board, moves=game.moves, last=description, winner=winner, finished=winner is not None)
+        if state["finished"]:
+            state.update(finished_at=datetime.now(timezone.utc).isoformat(), move_count=len(game.moves))
+            GAME_SESSIONS.mkdir(parents=True, exist_ok=True)
+            filename = "gomoku_together_" + datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S") + "_" + str(person["person_id"]) + ".json"
+            (GAME_SESSIONS / filename).write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+            state["session"] = filename
+            result_name = {"black": "你赢了", "white": "萤赢了", "draw": "和棋"}[winner]
+            record_event("一起游戏", f"五子棋结束：{result_name}，共{len(game.moves)}手", game="五子棋")
+        path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")
+        return _gomoku_response(state)
 
 
 @app.get("/api/mobile/games")
