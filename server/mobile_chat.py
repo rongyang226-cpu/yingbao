@@ -178,7 +178,11 @@ async def mobile_chat(text: str, person: dict) -> dict:
     except Exception as exc:
         record_event("聊天错误", "更新互动、话题或记忆失败，已继续回复", error=exc)
 
-    history = await get_history("mobile", chat_id, 20)
+    # 当前消息已经单独作为本轮 text 传给模型；历史里必须排除它，避免 AI 看见两份相同消息。
+    history = await get_history(
+        "mobile", chat_id, 20,
+        exclude_message_id=message_id,
+    )
     route = await dispatch(
         text=text,
         person_id=person_id,
