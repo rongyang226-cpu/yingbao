@@ -50,7 +50,7 @@ public class OverlayService extends Service {
 
     private WindowManager windowManager;
     private FrameLayout overlayView;
-    private ImageView modelView;
+    private AnimatedCharacterView modelView;
     private TextView bubbleView;
     private LinearLayout quickMenu;
     private WindowManager.LayoutParams params;
@@ -140,11 +140,9 @@ public class OverlayService extends Service {
         overlayView = new FrameLayout(this);
         overlayView.setBackgroundColor(Color.TRANSPARENT);
 
-        modelView = new ImageView(this);
+        modelView = new AnimatedCharacterView(this);
         modelView.setImageResource(getSharedPreferences("ying_overlay", MODE_PRIVATE).getBoolean("hd_art", true)
             ? R.drawable.yingbao_pose_stand_light : R.drawable.yingbao_model);
-        modelView.setAdjustViewBounds(true);
-        modelView.setScaleType(ImageView.ScaleType.FIT_CENTER);
         modelView.setBackgroundColor(Color.TRANSPARENT);
         overlayView.addView(modelView, new FrameLayout.LayoutParams(-1, -1));
 
@@ -324,6 +322,7 @@ public class OverlayService extends Service {
 
     private void poke(float x, float y) {
         lastPokeTime = android.os.SystemClock.uptimeMillis();
+        if (modelView != null) modelView.gesture();
         // Local tactile feedback must never wait for network.
         long duration = random.nextBoolean() ? 500L : 800L;
         if (modelView != null) {
@@ -439,11 +438,8 @@ public class OverlayService extends Service {
             if (modelView != null && !interacting &&
                 android.os.SystemClock.uptimeMillis() - lastPokeTime > 1100) {
                 double t = (android.os.SystemClock.uptimeMillis() - idleStart) / 1000.0;
-                modelView.setTranslationY(dp(2) * (float)Math.sin(t * 1.9));
-                modelView.setRotation(0.9f * (float)Math.sin(t * 0.72));
-                float breath = 1f + 0.008f * (float)Math.sin(t * 2.1);
-                modelView.setScaleX(breath);
-                modelView.setScaleY(breath);
+                // Individual regions breathe and sway inside AnimatedCharacterView.
+                modelView.setTranslationY(dp(1) * (float)Math.sin(t * 1.9));
             }
             handler.postDelayed(this, 40);
         }

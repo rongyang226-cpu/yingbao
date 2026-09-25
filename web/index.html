@@ -24,6 +24,7 @@ if(window.ResizeObserver)new ResizeObserver(updateArtworkBounds).observe($("avat
 const PET_ASSETS={stand:"/assets/yingbao_pose_stand_light.webp",wave:"/assets/yingbao_pose_wave_light.webp",clasp:"/assets/yingbao_pose_clasp_light.webp"};
 let petImage=null,petWind={hair:0,hem:0,head:0,goalHair:0,goalHem:0,next:0,impulseHair:0,impulseHem:0},petLastFrame=0;
 function drawPet(time){
+ if(window.petAnimationV2)return;
  requestAnimationFrame(drawPet);
  if(document.hidden||!petImage||time-petLastFrame<33)return;
  const delta=Math.min(.08,(time-petLastFrame)/1000||.033);petLastFrame=time;
@@ -304,4 +305,4 @@ let reconnects=0;function connect(){let p=location.protocol==="https:"?"wss":"ws
 document.addEventListener("visibilitychange",()=>{if(document.visibilityState==="visible")fetchState()});
 window.addEventListener("focus",fetchState);
 applySize();applyCharacterAsset();updateClock();setInterval(updateClock,1000);updateWeather();setInterval(updateWeather,600000);fetchState();setInterval(fetchState,5000);connect();
-</script></body></html>
+</script><script src="/assets/pet_motion.js?v=310" defer></script></body></html>

@@ -4,8 +4,8 @@ on:
   push:
     branches: [main]
     paths:
-      - "dist/Yingbao-v3.0.0-normal.apk"
-      - "dist/Yingbao-v3.0.0-compat.apk"
+      - "dist/Yingbao-v3.1.0-normal.apk"
+      - "dist/Yingbao-v3.1.0-compat.apk"
       - ".github/workflows/release-apk.yml"
   workflow_dispatch:
 
@@ -21,8 +21,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          cp dist/Yingbao-v3.0.0-normal.apk Yingbao.apk
-          cp dist/Yingbao-v3.0.0-normal.apk Yingbao-normal.apk
-          cp dist/Yingbao-v3.0.0-compat.apk Yingbao-vivo-compat.apk
-          gh release view v3.0.0 >/dev/null 2>&1 || gh release create v3.0.0 --title "莹宝 v3.0.0" --notes "VPS 自建搜索、真实图片收发、长期记忆和双端实时生活状态。标准版适用于新 WebView；vivo 兼容版适用于旧 WebView。两版同包名同签名，已装兼容版请继续使用兼容版。"
-          gh release upload v3.0.0 Yingbao.apk Yingbao-normal.apk Yingbao-vivo-compat.apk --clobber
+          cp dist/Yingbao-v3.1.0-normal.apk Yingbao.apk
+          cp dist/Yingbao-v3.1.0-normal.apk Yingbao-normal.apk
+          cp dist/Yingbao-v3.1.0-compat.apk Yingbao-vivo-compat.apk
+          gh release view v3.1.0 >/dev/null 2>&1 || gh release create v3.1.0 --title "莹宝 v3.1.0" --notes "人物立绘加入分区呼吸、发梢和裙摆运动、眨眼及挥手；安卓桌面悬浮窗也加入独立部位运动和触碰姿态反馈。继续支持 VPS 搜索、图片收发和记忆。标准版适用于新 WebView，vivo 兼容版适用于旧 WebView。两版同包名同签名。"
+          gh release upload v3.1.0 Yingbao.apk Yingbao-normal.apk Yingbao-vivo-compat.apk --clobber

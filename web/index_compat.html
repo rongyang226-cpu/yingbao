@@ -12,7 +12,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,"Mic
 #name{font-size:20px;font-weight:bold}
 #state{font-size:12px;color:#9b7281;margin-top:5px}
 #petArea{position:absolute;left:0;right:0;top:68px;bottom:84px;text-align:center;overflow:hidden}
-#pet{height:100%;max-width:86%;object-fit:contain}
+#pet{height:100%;max-width:86%;object-fit:contain;opacity:0!important}
 #bubble{display:none;position:absolute;left:12%;right:12%;top:18px;padding:10px 12px;border-radius:16px;background:#fff;border:1px solid #efb8ca;font-size:14px;box-shadow:0 6px 18px rgba(80,50,65,.12)}
 #hud{position:absolute;right:10px;top:10px;width:105px;text-align:left}
 .chip{margin-bottom:6px;padding:7px 8px;border-radius:12px;background:rgba(255,255,255,.92);font-size:11px}
@@ -74,7 +74,7 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,"Mic
 <div id="appearance" class="panel">
  <div class="head"><b>衣柜与动作</b><button class="close" onclick="closePanel('appearance')">返回</button></div>
  <div class="content">
-  <div class="small">兼容版关闭复杂 Canvas 动画，保留衣服和姿态切换。</div>
+  <div class="small">兼容版使用轻量动态渲染，支持呼吸、眨眼和挥手。</div>
   <button class="card" onclick="setAppearance('stand',null)"><b>自然站立</b><span>轻量兼容姿态</span></button>
   <button class="card" onclick="setAppearance('wave',null)"><b>抬手打招呼</b><span>轻量兼容姿态</span></button>
   <button class="card" onclick="setAppearance('clasp',null)"><b>双手靠近胸前</b><span>轻量兼容姿态</span></button>
@@ -239,6 +239,6 @@ el("pet").onclick=function(){
 el("input").onkeydown=function(e){e=e||window.event;if(e.keyCode===13){if(e.preventDefault)e.preventDefault();sendChat();return false}};
 window.onerror=function(){el("state").innerHTML="兼容模式已启动 · 正在重试同步";return true};
 fetchState();window.setInterval(fetchState,5000);
-</script>
+</script><script src="/assets/pet_motion.js?v=310" defer></script>
 </body>
 </html>
