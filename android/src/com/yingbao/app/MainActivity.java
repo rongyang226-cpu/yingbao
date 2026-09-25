@@ -18,6 +18,7 @@ import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
+import android.webkit.ValueCallback;
 import android.widget.Button;
 import android.widget.EditText;
 import android.widget.FrameLayout;
@@ -40,6 +41,8 @@ public class MainActivity extends Activity {
     private String deviceId;
     private boolean waitingOverlayPermission = false;
     private Button overlayButton;
+    private static final int PHOTO_PICKER_REQUEST = 4081;
+    private ValueCallback<Uri[]> photoFileCallback;
 
     @Override
     protected void onCreate(Bundle state) {
@@ -194,7 +197,7 @@ public class MainActivity extends Activity {
     private void showViewer() {
         root.removeAllViews();
         setupWebView();
-        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=290");
+        webView.loadUrl(NetConfig.getBase(this) + "/viewer?v=300");
     }
 
     private void setupWebView() {
@@ -207,10 +210,40 @@ public class MainActivity extends Activity {
         ws.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         CookieManager.getInstance().setAcceptCookie(true);
         CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true);
-        webView.setWebChromeClient(new WebChromeClient());
+        webView.setWebChromeClient(new WebChromeClient() {
+            @Override
+            public boolean onShowFileChooser(WebView view, ValueCallback<Uri[]> callback,
+                                             FileChooserParams params) {
+                if (photoFileCallback != null) photoFileCallback.onReceiveValue(null);
+                photoFileCallback = callback;
+                try {
+                    Intent picker = new Intent(Intent.ACTION_GET_CONTENT);
+                    picker.addCategory(Intent.CATEGORY_OPENABLE);
+                    picker.setType("image/*");
+                    startActivityForResult(Intent.createChooser(picker, "选择图片"), PHOTO_PICKER_REQUEST);
+                    return true;
+                } catch (Exception e) {
+                    photoFileCallback.onReceiveValue(null);
+                    photoFileCallback = null;
+                    return false;
+                }
+            }
+        });
         webView.setWebViewClient(new WebViewClient());
         webView.addJavascriptInterface(new NativeBridge(), "YingbaoNative");
         root.addView(webView, new FrameLayout.LayoutParams(-1, -1));
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode != PHOTO_PICKER_REQUEST || photoFileCallback == null) return;
+        Uri[] result = null;
+        if (resultCode == RESULT_OK && data != null && data.getData() != null) {
+            result = new Uri[]{data.getData()};
+        }
+        photoFileCallback.onReceiveValue(result);
+        photoFileCallback = null;
     }
 
     private class NativeBridge {

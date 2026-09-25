@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "poses": ["stand","lean","tilt","hair","heart","skirt","arms","sit"],
+  "outfits": ["moon","knit","blue","black","sleep"],
+  "pattern": "/assets/character/{outfit}/{pose}.webp",
+  "fallback": "/assets/yingbao_model.png",
+  "policy": "manual_pose_only"
+}

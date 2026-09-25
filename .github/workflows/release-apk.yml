@@ -2,11 +2,10 @@ name: Publish Yingbao APKs
 
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
-      - "dist/Yingbao-v2.9.0-normal.apk"
-      - "dist/Yingbao-v2.9.0-compat.apk"
+      - "dist/Yingbao-v3.0.0-normal.apk"
+      - "dist/Yingbao-v3.0.0-compat.apk"
       - ".github/workflows/release-apk.yml"
   workflow_dispatch:
 
@@ -18,27 +17,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Prepare release assets
-        run: |
-          cp dist/Yingbao-v2.9.0-normal.apk Yingbao.apk
-          cp dist/Yingbao-v2.9.0-normal.apk Yingbao-normal.apk
-          cp dist/Yingbao-v2.9.0-compat.apk Yingbao-vivo-compat.apk
-          test -s Yingbao.apk
-          test -s Yingbao-normal.apk
-          test -s Yingbao-vivo-compat.apk
-
-      - name: Update GitHub Release
+      - name: Publish signed Android builds
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload v2.9.0             Yingbao.apk             Yingbao-normal.apk             Yingbao-vivo-compat.apk             --clobber
-
-          gh release edit v2.9.0             --title "莹宝 v2.9.0"             --notes "莹宝 Android v2.9.0 双版本。
-
-          Assets 下载：
-          - Yingbao.apk：标准版（推荐新 Android / 新 WebView）
-          - Yingbao-normal.apk：标准版同内容，便于识别
-          - Yingbao-vivo-compat.apk：vivo Y9s / 老 WebView 兼容版，关闭高风险前端特效并使用 HTTP 状态同步
-
-          两个版本连接同一个 VPS、同一个萤、同一份记忆与生活状态。"
+          cp dist/Yingbao-v3.0.0-normal.apk Yingbao.apk
+          cp dist/Yingbao-v3.0.0-normal.apk Yingbao-normal.apk
+          cp dist/Yingbao-v3.0.0-compat.apk Yingbao-vivo-compat.apk
+          gh release view v3.0.0 >/dev/null 2>&1 || gh release create v3.0.0 --title "莹宝 v3.0.0" --notes "VPS 自建搜索、真实图片收发、长期记忆和双端实时生活状态。标准版适用于新 WebView；vivo 兼容版适用于旧 WebView。两版同包名同签名，已装兼容版请继续使用兼容版。"
+          gh release upload v3.0.0 Yingbao.apk Yingbao-normal.apk Yingbao-vivo-compat.apk --clobber

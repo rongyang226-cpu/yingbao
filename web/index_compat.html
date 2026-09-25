@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>萤 · 兼容版</title>
+<style>
+html,body{margin:0;width:100%;height:100%;overflow:hidden;font-family:Arial,"Microsoft YaHei",sans-serif;background:#fff3f7;color:#533f48}
+*{box-sizing:border-box}
+#page{position:fixed;left:0;top:0;right:0;bottom:0;background:#fff3f7}
+#top{height:68px;padding:15px 16px;background:#fff;border-bottom:1px solid #f2dce4}
+#name{font-size:20px;font-weight:bold}
+#state{font-size:12px;color:#9b7281;margin-top:5px}
+#petArea{position:absolute;left:0;right:0;top:68px;bottom:84px;text-align:center;overflow:hidden}
+#pet{height:100%;max-width:86%;object-fit:contain}
+#bubble{display:none;position:absolute;left:12%;right:12%;top:18px;padding:10px 12px;border-radius:16px;background:#fff;border:1px solid #efb8ca;font-size:14px;box-shadow:0 6px 18px rgba(80,50,65,.12)}
+#hud{position:absolute;right:10px;top:10px;width:105px;text-align:left}
+.chip{margin-bottom:6px;padding:7px 8px;border-radius:12px;background:rgba(255,255,255,.92);font-size:11px}
+.chip b{display:block;font-size:12px}
+#nav{position:absolute;left:8px;right:8px;bottom:8px;height:68px;background:#fff;border:1px solid #f0d8e1;border-radius:20px;padding:6px;text-align:center}
+.navbtn{width:23%;height:54px;border:0;border-radius:15px;background:#fff;color:#8b6876;font-size:12px}
+.navbtn.primary{background:#ffe1eb;color:#db6e93}
+.panel{display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:#fff8fb;z-index:20;overflow:auto}
+.panel.open{display:block}
+.head{height:60px;padding:12px 14px;background:#fff;border-bottom:1px solid #f0d9e2}
+.head b{font-size:18px}
+.close{float:right;border:0;border-radius:14px;padding:8px 13px;background:#edf0f5;color:#5a6170}
+.content{padding:14px}
+.card{display:block;width:100%;padding:13px;margin:8px 0;border:1px solid #eed7df;border-radius:15px;background:#fff;color:#4c5568;text-align:left}
+.card b{display:block;font-size:14px;margin-bottom:4px}
+.card span{font-size:12px;color:#8d93a0}
+#messages{padding:14px 12px 82px}
+.msg{max-width:82%;padding:10px 13px;border-radius:17px;margin:8px 0;white-space:pre-wrap;line-height:1.45}
+.me{margin-left:auto;background:#ef7fa4;color:#fff}
+.ying{margin-right:auto;background:#fff;border:1px solid #f1dde4}
+#composer{position:fixed;left:0;right:0;bottom:0;height:72px;padding:9px;background:#fff;border-top:1px solid #eee;z-index:22}
+#input{width:76%;height:48px;border:1px solid #ddd;border-radius:18px;padding:10px;font-size:16px}
+#send{width:20%;height:48px;border:0;border-radius:18px;background:#ef7fa4;color:#fff;font-weight:bold}
+.small{font-size:12px;color:#8d7480;line-height:1.6}
+#pickPhoto{width:48px;height:48px;border:0;border-radius:15px;background:#ffe1eb;color:#b55878}#input{width:calc(76% - 53px)}.msg img{display:block;max-width:100%;max-height:340px;margin-top:8px;border-radius:10px}</style>
+</head>
+<body>
+<div id="page">
+ <div id="top"><div id="name">萤 · vivo兼容版</div><div id="state">正在连接生活状态…</div></div>
+ <div id="petArea">
+  <img id="pet" src="/assets/yingbao_pose_stand_light.webp" alt="萤">
+  <div id="bubble"></div>
+  <div id="hud">
+   <div class="chip"><b id="act">同步中</b>正在做</div>
+   <div class="chip"><b id="mood">—</b>心情</div>
+   <div class="chip"><b id="energy">—</b>精力</div>
+   <div class="chip"><b id="place">—</b>位置</div>
+  </div>
+ </div>
+ <div id="nav">
+  <button class="navbtn primary" onclick="openPanel('chat')">聊天</button>
+  <button class="navbtn" onclick="openPanel('life')">状态</button>
+  <button class="navbtn" onclick="openPanel('appearance')">衣柜</button>
+  <button class="navbtn" onclick="openPanel('more')">更多</button>
+ </div>
+</div>
+
+<div id="chat" class="panel">
+ <div class="head"><b>萤 · 私聊</b><button class="close" onclick="closePanel('chat')">返回</button></div>
+ <div id="messages"></div>
+ <div id="composer"><button id="pickPhoto" onclick="el('photoInput').click()">图片</button><input id="photoInput" type="file" accept="image/*" style="display:none" onchange="sendPhotoCompat(this.files[0])"><input id="input" placeholder="和萤说点什么…"><button id="send" onclick="sendChat()">发送</button></div>
+</div>
+
+<div id="life" class="panel">
+ <div class="head"><b>生活状态</b><button class="close" onclick="closePanel('life')">返回</button></div>
+ <div id="lifeBody" class="content">正在读取…</div>
+</div>
+
+<div id="appearance" class="panel">
+ <div class="head"><b>衣柜与动作</b><button class="close" onclick="closePanel('appearance')">返回</button></div>
+ <div class="content">
+  <div class="small">兼容版关闭复杂 Canvas 动画，保留衣服和姿态切换。</div>
+  <button class="card" onclick="setAppearance('stand',null)"><b>自然站立</b><span>轻量兼容姿态</span></button>
+  <button class="card" onclick="setAppearance('wave',null)"><b>抬手打招呼</b><span>轻量兼容姿态</span></button>
+  <button class="card" onclick="setAppearance('clasp',null)"><b>双手靠近胸前</b><span>轻量兼容姿态</span></button>
+  <button class="card" onclick="setAppearance(null,'moon')"><b>月白冰蓝薄纱裙</b><span>衣柜</span></button>
+  <button class="card" onclick="setAppearance(null,'knit')"><b>奶白针织连衣裙</b><span>衣柜</span></button>
+  <button class="card" onclick="setAppearance(null,'blue')"><b>浅蓝百褶裙</b><span>衣柜</span></button>
+  <button class="card" onclick="setAppearance(null,'black')"><b>黑色简约连衣裙</b><span>衣柜</span></button>
+  <button class="card" onclick="setAppearance(null,'sleep')"><b>浅色薄款睡裙</b><span>衣柜</span></button>
+  <div id="appearanceMsg" class="small"></div>
+ </div>
+</div>
+
+<div id="more" class="panel">
+ <div class="head"><b>更多</b><button class="close" onclick="closePanel('more')">返回</button></div>
+ <div class="content">
+  <button class="card" onclick="loadDiary()"><b>今天的日记</b><span>读取 VPS 上的日记正文</span></button>
+  <button class="card" onclick="loadGames()"><b>游戏</b><span>读取 VPS 上真实运行的游戏</span></button>
+  <button class="card" onclick="sendPreset('/commands')"><b>指令说明</b><span>查看统一指令集</span></button>
+  <div id="moreBody" class="small"></div>
+ </div>
+</div>
+
+<script>
+function el(id){return document.getElementById(id)}
+function xhr(method,url,body,cb){
+ var x=new XMLHttpRequest();
+ x.open(method,url,true);
+ x.setRequestHeader("Accept","application/json");
+ if(body!==null){x.setRequestHeader("Content-Type","application/json;charset=UTF-8")}
+ x.onreadystatechange=function(){
+  if(x.readyState!==4)return;
+  var data=null;
+  try{data=JSON.parse(x.responseText||"{}")}catch(e){data={}}
+  cb(x.status,data)
+ };
+ try{x.send(body)}catch(e){cb(0,{})}
+}
+function activity(v){
+ var m={shopping:"逛街",idle:"休息",resting:"休息",sleeping:"睡觉",eating:"吃东西",cooking:"做饭",gaming:"玩游戏",reading:"看书",watching:"看东西",walking:"散步",working:"忙事情",chatting:"聊天",cleaning:"收拾房间",showering:"洗澡"};
+ return m[v]||"陪着你"
+}
+function mood(v){
+ var m={neutral:"平静",happy:"开心",calm:"平静",sad:"难过",angry:"生气",tired:"困倦",sleepy:"困了",excited:"兴奋",shy:"害羞",upset:"不开心"};
+ return m[v]||"平静"
+}
+function place(v){
+ var m={nearby_store:"附近商店",home:"家里",bedroom:"卧室",living_room:"客厅",kitchen:"厨房",outside:"外面",store:"商店",desk:"书桌边"};
+ return m[v]||"家里"
+}
+var lastState=null;
+function applyState(s){
+ lastState=s||{};
+ var life=lastState.life||{}, emotion=lastState.emotion||{}, world=lastState.world||{};
+ var sleeping=life.sleep_state==="sleeping", act=activity(life.activity);
+ el("state").innerHTML=(sleeping?"睡着了":"醒着")+" · "+act+" · 已同步";
+ el("act").innerHTML=act;
+ el("mood").innerHTML=mood(emotion.mood);
+ el("energy").innerHTML=life.energy===null||typeof life.energy==="undefined"?"—":Math.round(Number(life.energy)*100)+"%";
+ el("place").innerHTML=place(world.place);
+ el("pet").style.opacity=sleeping?"0.86":"1";
+ var b=el("lifeBody");
+ if(b)b.innerHTML='<button class="card"><b>'+act+'</b><span>当前活动</span></button>'+
+ '<button class="card"><b>'+(sleeping?"睡着了":"醒着")+'</b><span>睡眠状态</span></button>'+
+ '<button class="card"><b>'+mood(emotion.mood)+'</b><span>心情</span></button>'+
+ '<button class="card"><b>'+place(world.place)+'</b><span>位置</span></button>';
+}
+function fetchState(){
+ xhr("GET","/api/state?_="+new Date().getTime(),null,function(code,data){
+  if(code===200)applyState(data);else el("state").innerHTML="连接中…";
+ });
+}
+function openPanel(id){el(id).className="panel open";if(id==="life")fetchState()}
+function closePanel(id){el(id).className="panel"}
+function addMsg(t,c){
+ var d=document.createElement("div");d.className="msg "+c;d.appendChild(document.createTextNode(t));
+ el("messages").appendChild(d);window.setTimeout(function(){el("messages").scrollTop=el("messages").scrollHeight},20);return d
+}
+function sendChat(){
+ var t=el("input").value.replace(/^\s+|\s+$/g,"");if(!t)return;
+ el("input").value="";addMsg(t,"me");var wait=addMsg("正在想…","ying");el("send").disabled=true;
+ xhr("POST","/api/mobile/chat",JSON.stringify({text:t}),function(code,data){
+  wait.innerHTML="";
+  wait.appendChild(document.createTextNode(code===200&&data.reply?data.reply:"连接断了一下。"));
+  if(code===200&&data.image_url){var img=document.createElement("img");img.src=data.image_url;img.alt="萤发送的图片";wait.appendChild(img)}
+  el("send").disabled=false;
+ });
+}
+function sendPhotoCompat(file){
+ if(!file||!/^image\//.test(file.type))return;
+ var caption=el("input").value;el("input").value="";
+ addMsg(caption||"发了一张图片","me");var wait=addMsg("正在看图片…","ying");
+ el("pickPhoto").disabled=true;
+ var reader=new FileReader();
+ reader.onerror=function(){wait.textContent="图片读取失败。";el("pickPhoto").disabled=false};
+ reader.onload=function(){
+  var img=new Image();
+  img.onerror=function(){wait.textContent="图片格式不支持。";el("pickPhoto").disabled=false};
+  img.onload=function(){
+   var scale=Math.min(1,1500/Math.max(img.width,img.height)),canvas=document.createElement("canvas");
+   canvas.width=Math.max(1,Math.round(img.width*scale));canvas.height=Math.max(1,Math.round(img.height*scale));
+   canvas.getContext("2d").drawImage(img,0,0,canvas.width,canvas.height);
+   var data=canvas.toDataURL("image/jpeg",.82);
+   if(data.length>7500000){wait.textContent="图片太大，换一张试试。";el("pickPhoto").disabled=false;return}
+   xhr("POST","/api/mobile/chat/image",JSON.stringify({data:data,caption:caption}),function(code,res){
+    wait.textContent=res.reply||(code===200?"看到了。":"图片发送失败。");
+    el("pickPhoto").disabled=false;el("photoInput").value="";
+   });
+  };img.src=reader.result;
+ };reader.readAsDataURL(file);
+}
+function sendPreset(t){closePanel("more");openPanel("chat");el("input").value=t;sendChat()}
+function setAppearance(pose,outfit){
+ var data={};if(pose)data.pose=pose;if(outfit)data.outfit=outfit;
+ xhr("POST","/api/mobile/appearance",JSON.stringify(data),function(code,res){
+  el("appearanceMsg").innerHTML=code===200?"已经换好了。":"切换失败，请稍后再试。";
+  if(code===200){
+   var p=res.pose||"stand";
+   var src=p==="wave"?"/assets/yingbao_pose_wave_light.webp":p==="clasp"?"/assets/yingbao_pose_clasp_light.webp":"/assets/yingbao_pose_stand_light.webp";
+   el("pet").src=src;
+  }
+ });
+}
+function loadDiary(){
+ el("moreBody").innerHTML="正在读取日记…";
+ xhr("GET","/api/mobile/diary?_="+new Date().getTime(),null,function(code,data){
+  el("moreBody").innerHTML="";
+  var d=document.createElement("div");d.className="card";d.style.whiteSpace="pre-wrap";d.appendChild(document.createTextNode(code===200?(data.text||"今天还没有正式日记。"):"日记读取失败。"));el("moreBody").appendChild(d);
+ });
+}
+function loadGames(){
+ el("moreBody").innerHTML="正在读取游戏…";
+ xhr("GET","/api/mobile/games?_="+new Date().getTime(),null,function(code,data){
+  el("moreBody").innerHTML="";
+  if(code!==200){el("moreBody").innerHTML="游戏列表读取失败。";return}
+  var list=data["游戏"]||[];
+  for(var i=0;i<list.length;i++){
+   (function(item){
+    var b=document.createElement("button");b.className="card";
+    b.innerHTML="<b>"+(item["名称"]||item["编号"]||"游戏")+"</b><span>在 VPS 上运行真实规则</span>";
+    b.onclick=function(){playGame(item["编号"],b)};el("moreBody").appendChild(b);
+   })(list[i]);
+  }
+  if(!list.length)el("moreBody").innerHTML="暂时没有游戏。";
+ });
+}
+function playGame(game,button){
+ button.innerHTML="<b>正在运行…</b><span>请稍等</span>";
+ xhr("POST","/api/mobile/games/"+encodeURIComponent(game)+"/play","",function(code,data){
+  if(code===200&&data["对局"]){button.innerHTML="<b>"+(data["对局"]["名称"]||game)+"</b><span>"+(data["对局"]["总结"]||"已完成")+"</span>"}
+  else button.innerHTML="<b>运行失败</b><span>错误已记录</span>";
+ });
+}
+function showBubble(t){
+ var b=el("bubble");b.innerHTML=t;b.style.display="block";
+ window.clearTimeout(window.bubbleTimer);window.bubbleTimer=window.setTimeout(function(){b.style.display="none"},2200);
+}
+el("pet").onclick=function(){
+ var lines=["我在。","轻一点嘛。","嗯？摸摸头？","别把我当按钮呀。","再摸一下也可以。","好啦，我知道你在。"];
+ var t=lines[Math.floor(Math.random()*lines.length)];showBubble(t);
+ xhr("POST","/api/mobile/touch",JSON.stringify({zone:"head",text:t}),function(){});
+};
+el("input").onkeydown=function(e){e=e||window.event;if(e.keyCode===13){if(e.preventDefault)e.preventDefault();sendChat();return false}};
+window.onerror=function(){el("state").innerHTML="兼容模式已启动 · 正在重试同步";return true};
+fetchState();window.setInterval(fetchState,5000);
+</script>
+</body>
+</html>

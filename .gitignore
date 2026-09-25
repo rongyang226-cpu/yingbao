@@ -27,3 +27,8 @@ android/build/
 .vscode/
 .DS_Store
 Thumbs.db
+
+# Reproducible Android builds stay local
+/out/
+__pycache__/
+*.pyc

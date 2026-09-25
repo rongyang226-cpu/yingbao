@@ -2,7 +2,7 @@
 
 ## 📦 直接下载 APK
 
-[**点击下载 莹宝 2.0**](https://github.com/rongyang226-cpu/yingbao/releases/latest/download/Yingbao.apk)
+[**标准版下载**](https://github.com/rongyang226-cpu/yingbao/releases/latest/download/Yingbao.apk) · [**vivo 兼容版下载**](https://github.com/rongyang226-cpu/yingbao/releases/latest/download/Yingbao-vivo-compat.apk)
 
 GitHub Release 附件，文件名固定为 Yingbao.apk。
 
@@ -24,7 +24,7 @@ GitHub Release 附件，文件名固定为 Yingbao.apk。
 - 长按人物打开聊天
 - 状态气泡约每 4.5～5.5 分钟自然出现
 
-当前版本：2.0.0
+当前版本：3.0.0
 
 包名：com.yingbao.app
 
@@ -47,3 +47,12 @@ GitHub Release 附件，文件名固定为 Yingbao.apk。
 - Life/sleep clock is normalized to the shared UTC+8 timeline.
 - Character artwork is bundled locally for the floating-window/model fallback.
 - Access keys keep permanent first-device binding semantics.
+
+
+## v3.0.0
+- TG 和软件均可使用 `/search 关键词` 调用 VPS 本机 SearXNG，并显示实际来源；联网失败会明确回复。
+- TG 和软件均可用 `/image 关键词` 接收真正的图片；软件聊天页可从相册选图发送，收到的原图只暂存用于识图，长期仅留摘要。
+- 普通版与 vivo 兼容版使用相同包名和既有签名；兼容版版本码更高，已安装兼容版请继续安装兼容版。
+- 固定人设与聊天规则优先发送，提高上下文缓存复用；DeepSeek 建连超时最多重试两次。
+- 程序时间和软件时钟跟随 VPS，虚拟活动和记忆以数据库真实记录为准；不把未发生的动作或梦境写成事实。
+- 新增 `vps/` 源码快照与部署说明；私人数据库、密钥与签名材料继续留在 VPS。
