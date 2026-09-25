@@ -274,6 +274,34 @@ async def archive_group_command(update: Update, context: ContextTypes.DEFAULT_TY
         await _archive_group_input(message, user, chat, message.text)
 
 
+async def archive_group_other(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Archive delivered non-text group events as metadata, never media bytes."""
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    if not user and message and message.sender_chat:
+        sender = message.sender_chat
+        user = SimpleNamespace(
+            id=f"sender_chat:{sender.id}",
+            username=sender.username,
+            full_name=sender.title or "群频道",
+        )
+    if not message or not chat or not user:
+        return
+    if message.text or message.photo or message.sticker:
+        return
+    kinds = (
+        ("voice", "语音（未转录）"), ("video", "视频（未提取画面）"),
+        ("audio", "音频（未转录）"), ("animation", "动图（未识别）"),
+        ("document", "文件（未读取）"), ("video_note", "视频消息（未识别）"),
+        ("location", "位置"), ("contact", "联系人卡片（未展开）"),
+        ("poll", "投票"), ("new_chat_members", "入群事件"),
+    )
+    kind = next((label for field, label in kinds if getattr(message, field, None)), "群服务消息")
+    caption = str(message.caption or "").strip()
+    await _archive_group_input(message, user, chat, f"[{kind}] {caption}".strip())
+
+
 def _cancel_pending_reminder(text: str) -> bool:
     text = text.strip()
     cancel_words = (
@@ -3619,6 +3647,10 @@ def build_application():
 
     app.add_handler(
         MessageHandler(filters.ChatType.GROUPS & filters.COMMAND, archive_group_command),
+        group=-1,
+    )
+    app.add_handler(
+        MessageHandler(filters.ChatType.GROUPS & ~filters.TEXT & ~filters.PHOTO & ~filters.Sticker.ALL, archive_group_other),
         group=-1,
     )
 
