@@ -1,3 +1,4 @@
+import logging
 import random
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,9 +14,11 @@ from app.activity.world_state import get_presence
 from app.social.people import get_or_create_person, get_person_by_identity
 from app.context.builder import build_context, render_context
 from app.brain.deepseek import chat as deepseek_chat
+from app.db import save_message
 
 TOKYO_TZ = ZoneInfo("Asia/Tokyo")
 PERSONA_FILE = Path("/opt/ying/persona/core.md")
+log = logging.getLogger(__name__)
 
 MIN_GAP_HOURS = 4.0
 RECENT_CHAT_SILENCE_MINUTES = 70
@@ -264,10 +267,21 @@ async def proactive_tick(context):
     if len(answer) > 220:
         answer = answer[:220].rstrip()
 
-    await context.bot.send_message(
+    sent = await context.bot.send_message(
         chat_id=int(TELEGRAM_OWNER_ID),
         text=answer,
     )
+
+    # Proactive messages are part of the conversation. Without this record a
+    # later "想呀" cannot refer back to the question we just asked.
+    try:
+        await save_message(
+            "telegram", TELEGRAM_OWNER_ID, 0, "ying", "assistant", answer,
+            person_id=person["person_id"], message_id=sent.message_id,
+        )
+    except Exception:
+        # The message was already delivered; do not retry and send it twice.
+        log.exception("Failed to persist proactive reply")
 
     await _mark_sent(today)
 

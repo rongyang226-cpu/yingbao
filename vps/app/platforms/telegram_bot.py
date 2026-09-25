@@ -45,6 +45,7 @@ from app.social.relationship_policy import is_romance_escalation, friend_only_re
 from app.social.profile_observer import observe_message
 from app.social.interaction_events import apply_interaction_signals
 from app.context.topic_tracker import observe_topic
+from app.context.short_reply import short_reply_hint
 from app.memory.extractor import extract_memory_candidates
 from app.memory.maintenance import maintain_long_term_memory
 from app.memory.episodic import add_episode, maintain_episodic_memory
@@ -2853,6 +2854,8 @@ async def handle_text(
         # Keep stable persona and scene rules together as a cacheable prefix.
         # The live clock, relationship state and memory remain authoritative.
         system_prompt += "\n\n" + dynamic_context
+        if not is_group:
+            system_prompt += short_reply_hint(text, history)
         answer = await deepseek_chat(
             system_prompt,
             history,

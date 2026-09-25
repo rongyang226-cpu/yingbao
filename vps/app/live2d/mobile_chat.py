@@ -17,6 +17,7 @@ from app.social.profile_observer import observe_message
 from app.memory.extractor import extract_memory_candidates
 from app.memory.episodic import add_episode
 from app.context.topic_tracker import observe_topic
+from app.context.short_reply import short_reply_hint
 from app.activity.attention import focus_on_conversation
 from app.activity.life_state import get_life_state
 from app.activity.home_world import get_home_world
@@ -306,6 +307,7 @@ async def mobile_chat(text: str, person: dict, *, image_summary: str | None = No
             "- 日常回复自然、简洁，不解释内部数据库、平台同步或权限实现。"
         )
         system_prompt += "\n\n" + dynamic_context
+        system_prompt += short_reply_hint(text, history)
         if image_summary:
             system_prompt += (
                 "\n\n【本轮图片的视觉摘要】\n" + image_summary[:1800]
