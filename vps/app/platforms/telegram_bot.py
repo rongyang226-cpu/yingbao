@@ -2872,7 +2872,7 @@ async def handle_text(
             # Search already finished: always deliver its verified results.
             answer = _build_search_fallback(route.data or {})
         else:
-            await message.reply_text("脑子刚卡了一下……")
+            await message.reply_text("刚才连接没成功，我还在。你把那句再发我一次，好吗？")
             return
 
     # 隐私模式只保存在 RAM

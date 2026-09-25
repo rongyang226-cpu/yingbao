@@ -320,7 +320,7 @@ async def mobile_chat(text: str, person: dict, *, image_summary: str | None = No
         except Exception:
             log.exception("Mobile DeepSeek request failed")
             if route.intent.type != "web_search":
-                raise
+                return {"ok": False, "reply": "刚才连接没成功，我还在。你把那句再发我一次，好吗？"}
             answer = search_fallback_text(route.data or {})
         answer = str(answer or "").strip()
         if route.intent.type == "web_search" and (

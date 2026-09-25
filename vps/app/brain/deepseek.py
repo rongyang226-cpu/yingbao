@@ -20,7 +20,7 @@ def _http_client():
     global _client
     if _client is None or _client.is_closed:
         _client = httpx.AsyncClient(
-            timeout=httpx.Timeout(45.0, connect=8.0),
+            timeout=httpx.Timeout(45.0, connect=5.0),
             limits=httpx.Limits(max_keepalive_connections=10, max_connections=20),
             http2=False,
         )
