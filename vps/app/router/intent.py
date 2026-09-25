@@ -205,6 +205,9 @@ def _extract_weather_place(text: str):
 def _weather_day(text: str):
     t = _normalize(text)
 
+    if "后天" in t:
+        return "day_after_tomorrow"
+
     if "明天" in t:
         return "tomorrow"
 
@@ -258,6 +261,21 @@ def detect_intent(text: str) -> Intent:
     # 例如“我给你加了世界天气感觉怎么样”应当继续普通聊天，
     # 不能因为出现“天气”“怎么样”就直接调用天气工具。
     if not _is_weather_meta_chat(text):
+        # 两个明确地点都要回答；单地点解析会被“东京”等默认规则截断。
+        import re
+        pair = re.search(
+            r"(北京|东京|郑州|上海|广州|深圳|大阪|纽约|伦敦|巴黎)"
+            r"(?:市)?\s*(?:和|与|跟|、)\s*"
+            r"(北京|东京|郑州|上海|广州|深圳|大阪|纽约|伦敦|巴黎)(?:市)?",
+            text,
+        )
+        if pair and any(x in text for x in ("天气", "温度", "下雨")):
+            return Intent(
+                type="weather_multi",
+                query="|".join(pair.groups()),
+                target=_weather_day(text),
+                confidence=0.99,
+            )
         weather_place = _extract_weather_place(text)
 
         if weather_place:
@@ -269,7 +287,7 @@ def detect_intent(text: str) -> Intent:
             )
         if any(x in text for x in (
             "天气怎么样", "天气如何", "天气预报", "今天天气", "明天天气",
-            "几度", "多少度", "会下雨", "下雨吗", "查天气", "天气呢",
+            "后天天气", "几度", "多少度", "会下雨", "下雨吗", "查天气", "天气呢",
         )):
             return Intent(type="weather_missing_place")
 

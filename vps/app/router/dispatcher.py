@@ -34,6 +34,18 @@ class RouteResult:
     data: Any = None
 
 
+async def _weather_answer(place_name: str, day: str) -> str:
+    try:
+        result = await asyncio.wait_for(
+            get_weather_for_place(place_name, required_day=day), timeout=25
+        )
+    except Exception:
+        return f"{place_name}的天气服务暂时连接不上，这次没有实时数据。稍后再查。"
+    if not result:
+        return f"没找到「{place_name}」对应的地点。可以换成城市名再问我。"
+    return format_weather_reply(result, day)
+
+
 async def dispatch(
     *,
     text: str,
@@ -92,22 +104,17 @@ async def dispatch(
         return RouteResult(intent=intent, handled=True, answer="想查哪个城市的天气？比如北京或东京。")
 
     # ===== 天气：用查到的数据直接作答，避免模型反说“查不到” =====
+    if intent.type == "weather_multi":
+        places = list(dict.fromkeys((intent.query or "").split("|")))[:2]
+        answers = await asyncio.gather(*(
+            _weather_answer(place, intent.target or "today") for place in places
+        ))
+        return RouteResult(intent=intent, handled=True, answer="\n".join(answers))
+
     if intent.type == "weather":
-        try:
-            result = await asyncio.wait_for(get_weather_for_place(intent.query), timeout=25)
-        except Exception:
-            return RouteResult(
-                intent=intent, handled=True,
-                answer=f"{intent.query}的天气服务暂时连接不上，这次没有实时数据。稍后再查。",
-            )
-        if not result:
-            return RouteResult(
-                intent=intent, handled=True,
-                answer=f"没找到「{intent.query}」对应的地点。可以换成城市名再问我。",
-            )
         return RouteResult(
             intent=intent, handled=True,
-            answer=format_weather_reply(result, intent.target or "today"),
+            answer=await _weather_answer(intent.query, intent.target or "today"),
         )
 
     # ===== 最近消息查询 =====

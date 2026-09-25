@@ -333,7 +333,7 @@ def _fetch_weather_sync(location_key):
             "temperature_2m_min",
             "precipitation_probability_max",
         ]),
-        "forecast_days": 2,
+        "forecast_days": 3,
     }
 
     url = (
@@ -412,6 +412,12 @@ async def get_weather(location_key):
             if len(rain_prob) > 1
             else None
         ),
+        "day_after_tomorrow_weather": (
+            describe_weather(daily_codes[2]) if len(daily_codes) > 2 else None
+        ),
+        "day_after_tomorrow_max": temp_max[2] if len(temp_max) > 2 else None,
+        "day_after_tomorrow_min": temp_min[2] if len(temp_min) > 2 else None,
+        "day_after_tomorrow_rain_probability": rain_prob[2] if len(rain_prob) > 2 else None,
     }
 
 
@@ -533,7 +539,7 @@ def _fetch_weather_by_coords_sync(
             "temperature_2m_min",
             "precipitation_probability_max",
         ]),
-        "forecast_days": 2,
+        "forecast_days": 3,
     }
 
     url = (
@@ -615,10 +621,16 @@ def _normalize_weather_result(raw):
             if len(rain_prob) > 1
             else None
         ),
+        "day_after_tomorrow_weather": (
+            describe_weather(daily_codes[2]) if len(daily_codes) > 2 else None
+        ),
+        "day_after_tomorrow_max": temp_max[2] if len(temp_max) > 2 else None,
+        "day_after_tomorrow_min": temp_min[2] if len(temp_min) > 2 else None,
+        "day_after_tomorrow_rain_probability": rain_prob[2] if len(rain_prob) > 2 else None,
     }
 
 
-async def get_weather_for_place(place_name):
+async def get_weather_for_place(place_name, required_day="today"):
     original_name = str(place_name or "").strip()
     lookup_name = normalize_weather_place(original_name)
 
@@ -634,7 +646,8 @@ async def get_weather_for_place(place_name):
 
     cached = await get_cached_weather(cache_key)
 
-    if cached:
+    if cached and (required_day != "day_after_tomorrow" or
+                   cached["weather"].get("day_after_tomorrow_weather") is not None):
         return {
             "place": place,
             "weather": cached["weather"],
@@ -690,7 +703,13 @@ def format_weather_reply(result, day="today"):
         if a is not None and b is not None:
             return f"{a}～{b}℃"
         return f"最低{a}℃" if a is not None else (f"最高{b}℃" if b is not None else None)
-    if day == "tomorrow":
+    if day == "day_after_tomorrow":
+        parts = [value("day_after_tomorrow_weather"),
+                 temperatures("day_after_tomorrow_min", "day_after_tomorrow_max")]
+        rain = value("day_after_tomorrow_rain_probability", "%")
+        if rain is not None: parts.append(f"最高降雨概率{rain}")
+        prefix = f"{region}后天预计："
+    elif day == "tomorrow":
         parts = [value("tomorrow_weather"), temperatures("tomorrow_min", "tomorrow_max")]
         rain = value("tomorrow_rain_probability", "%")
         if rain is not None: parts.append(f"最高降雨概率{rain}")
@@ -938,7 +957,7 @@ def _fetch_location_weather_sync(location):
             "temperature_2m_min",
             "precipitation_probability_max",
         ]),
-        "forecast_days": 2,
+        "forecast_days": 3,
     }
 
     url = (
@@ -1030,4 +1049,10 @@ async def get_city_weather(place_name):
         "tomorrow_rain_probability": (
             rain_prob[1] if len(rain_prob) > 1 else None
         ),
+        "day_after_tomorrow_weather": (
+            describe_weather(daily_codes[2]) if len(daily_codes) > 2 else None
+        ),
+        "day_after_tomorrow_max": temp_max[2] if len(temp_max) > 2 else None,
+        "day_after_tomorrow_min": temp_min[2] if len(temp_min) > 2 else None,
+        "day_after_tomorrow_rain_probability": rain_prob[2] if len(rain_prob) > 2 else None,
     }
