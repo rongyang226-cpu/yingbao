@@ -105,12 +105,8 @@ async def find_image(query: str) -> FoundImage | None:
         candidates = await asyncio.wait_for(image_search(query, limit=8), timeout=10)
     except Exception:
         candidates = []
-    try:
-        candidates.extend(await asyncio.wait_for(_commons(query), timeout=10))
-    except Exception:
-        pass
-    async with httpx.AsyncClient(timeout=8, follow_redirects=False) as client:
-        for item in candidates[:12]:
+    async with httpx.AsyncClient(timeout=5, follow_redirects=False) as client:
+        for item in candidates[:8]:
             url = str(item.get("image_url") or "")
             if not await asyncio.to_thread(_public_https, url):
                 continue
@@ -125,6 +121,28 @@ async def find_image(query: str) -> FoundImage | None:
                             raise ValueError("image too large")
                 jpg = await asyncio.to_thread(_jpeg, bytes(raw))
                 return FoundImage(jpg, str(item.get("title") or query)[:80], str(item.get("source_url") or url))
+            except (httpx.HTTPError, OSError, ValueError, UnidentifiedImageError):
+                continue
+        # Commons is an independent fallback. Ask it only when image results
+        # could not be downloaded, saving a remote API request on success.
+        try:
+            commons = await asyncio.wait_for(_commons(query), timeout=8)
+        except Exception:
+            commons = []
+        for item in commons[:6]:
+            url = str(item.get("image_url") or "")
+            if not await asyncio.to_thread(_public_https, url):
+                continue
+            try:
+                async with client.stream("GET", url) as r:
+                    if r.status_code != 200 or not r.headers.get("content-type", "").lower().startswith("image/"):
+                        continue
+                    raw = bytearray()
+                    async for part in r.aiter_bytes():
+                        raw.extend(part)
+                        if len(raw) > MAX_IMAGE_BYTES:
+                            raise ValueError("image too large")
+                return FoundImage(await asyncio.to_thread(_jpeg, bytes(raw)), str(item.get("title") or query)[:80], str(item.get("source_url") or url))
             except (httpx.HTTPError, OSError, ValueError, UnidentifiedImageError):
                 continue
     return None

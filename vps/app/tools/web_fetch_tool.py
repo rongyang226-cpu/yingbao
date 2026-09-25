@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import gzip
+import zlib
 import ipaddress
 import re
 import socket
@@ -69,15 +71,23 @@ def _fetch_sync(url: str, max_chars: int):
     if not _public_host(parsed.hostname):
         raise ValueError("non-public host blocked")
 
+    class _SafeRedirect(urllib.request.HTTPRedirectHandler):
+        def redirect_request(self, request, fp, code, msg, headers, newurl):
+            target = urllib.parse.urlparse(newurl)
+            if target.scheme not in {"http", "https"} or not target.hostname or not _public_host(target.hostname):
+                raise ValueError("redirect to non-public host blocked")
+            return super().redirect_request(request, fp, code, msg, headers, newurl)
+
     req = urllib.request.Request(
         url,
         headers={
             "User-Agent": "Mozilla/5.0 (Ying Research/1.0)",
             "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.7",
+            "Accept-Encoding": "identity",
         },
     )
 
-    with urllib.request.urlopen(req, timeout=12) as resp:
+    with urllib.request.build_opener(_SafeRedirect).open(req, timeout=12) as resp:
         content_type = (resp.headers.get("Content-Type") or "").lower()
         if "text/html" not in content_type and "text/plain" not in content_type:
             return {
@@ -86,9 +96,24 @@ def _fetch_sync(url: str, max_chars: int):
                 "content_type": content_type,
             }
 
-        raw = resp.read(MAX_BYTES)
+        raw = resp.read(MAX_BYTES + 1)
+        encoding = (resp.headers.get("Content-Encoding") or "").lower().strip()
+        charset = resp.headers.get_content_charset() or "utf-8"
 
-    text = raw.decode("utf-8", errors="replace")
+    if len(raw) > MAX_BYTES:
+        return {"url": resp.geturl(), "text": "", "content_type": content_type}
+    if encoding == "gzip" or raw.startswith(b"\x1f\x8b"):
+        dec = zlib.decompressobj(16 + zlib.MAX_WBITS)
+        raw = dec.decompress(raw, MAX_BYTES + 1)
+    elif encoding == "deflate":
+        dec = zlib.decompressobj()
+        raw = dec.decompress(raw, MAX_BYTES + 1)
+    if len(raw) > MAX_BYTES or b"\x00" in raw[:4096]:
+        return {"url": resp.geturl(), "text": "", "content_type": content_type}
+    try:
+        text = raw.decode(charset, errors="replace")
+    except LookupError:
+        text = raw.decode("utf-8", errors="replace")
 
     if "text/html" in content_type:
         parser = _TextExtractor()

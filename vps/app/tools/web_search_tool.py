@@ -336,13 +336,8 @@ async def web_search(query: str, limit: int = 5):
     )
     result["query"] = query
 
-    results = result.get("results") or []
-    if results:
-        result["results"] = await _enrich_results(
-            results,
-            max_pages=2,
-        )
-
+    # Search snippets and source URLs are sufficient for a prompt reply.
+    # Following pages serially made ordinary searches stall for 25+ seconds.
     return result
 
 

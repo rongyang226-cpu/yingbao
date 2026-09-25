@@ -7,7 +7,13 @@ from app.config import DB_PATH
 from app.social.state import now
 
 
+_life_schema_ready = False
+
+
 async def init_life_state_db():
+    global _life_schema_ready
+    if _life_schema_ready:
+        return
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute(
             """
@@ -65,6 +71,7 @@ async def init_life_state_db():
         )
 
         await db.commit()
+    _life_schema_ready = True
 
 
 async def get_life_state():

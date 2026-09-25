@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import secrets
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 import aiosqlite
 
@@ -17,7 +17,13 @@ def digest(value: str):
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
+_auth_schema_ready = False
+
+
 async def init_mobile_auth():
+    global _auth_schema_ready
+    if _auth_schema_ready:
+        return
     async with aiosqlite.connect(DB_PATH) as db:
         await db.executescript("""
         CREATE TABLE IF NOT EXISTS mobile_keys (
@@ -41,6 +47,7 @@ async def init_mobile_auth():
         );
         """)
         await db.commit()
+    _auth_schema_ready = True
 
 
 async def create_blank_person(db):
@@ -153,7 +160,7 @@ async def authenticate_device(device_id: str, session_secret: str):
 
     async with aiosqlite.connect(DB_PATH) as db:
         cur = await db.execute(
-            """SELECT s.session_hash, s.person_id,
+            """SELECT s.session_hash, s.person_id, s.last_seen_at,
                       k.slot, k.access_role, k.active,
                       p.display_name, p.role
                FROM mobile_device_sessions s
@@ -166,17 +173,25 @@ async def authenticate_device(device_id: str, session_secret: str):
         if not row:
             return None
 
-        expected, person_id, slot, access_role, active, display_name, person_role = row
+        expected, person_id, last_seen_at, slot, access_role, active, display_name, person_role = row
         if not int(active):
             return None
         if not secrets.compare_digest(expected, digest(session_secret)):
             return None
 
-        await db.execute(
-            "UPDATE mobile_device_sessions SET last_seen_at=? WHERE device_id=?",
-            (now_iso(), device_id),
-        )
-        await db.commit()
+        # State polling can occur every few seconds; a write on each request
+        # creates avoidable contention with Telegram and life state workers.
+        try:
+            last_seen = datetime.fromisoformat(last_seen_at)
+            needs_update = datetime.now(timezone.utc) - last_seen > timedelta(minutes=5)
+        except (TypeError, ValueError):
+            needs_update = True
+        if needs_update:
+            await db.execute(
+                "UPDATE mobile_device_sessions SET last_seen_at=? WHERE device_id=?",
+                (now_iso(), device_id),
+            )
+            await db.commit()
 
     return {
         "person_id": int(person_id),

@@ -47,8 +47,8 @@ def _search_images_sync(
 
     for item in (data.get("results") or [])[:limit]:
         image_url = (
-            item.get("img_src")
-            or item.get("thumbnail_src")
+            item.get("thumbnail_src")
+            or item.get("img_src")
         )
 
         if not image_url:
