@@ -467,6 +467,7 @@ async def cmd_me(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"称呼：{user.full_name or user.username or '未命名'}\n"
         f"平台：Telegram\n"
         f"权限：{'OWNER' if owner else '普通成员'}"
+        + ("\n与萤的关系：男朋友\n当前所在：郑州（萤在东京）" if owner and update.effective_chat.type == "private" else "")
     )
 
 
