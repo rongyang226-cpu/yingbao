@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 import asyncio
 import logging
+import random
 from datetime import datetime, timezone, timedelta
 
 from app.config import TELEGRAM_OWNER_ID
@@ -25,6 +26,29 @@ from app.commands import help_text, COMMAND_MANUAL_VERSION
 
 PERSONA_FILE = Path("/opt/ying/persona/core.md")
 log = logging.getLogger(__name__)
+
+
+def _sleep_interaction_reply(*, owner: bool) -> str:
+    """睡眠中只返回状态/梦境片段，不进入正常聊天模型。"""
+    sleep_lines = (
+        "【睡眠中】萤还没醒，手机亮了一下又暗了。",
+        "【睡眠中】她翻了个身，把被子往怀里拢了拢，没有醒。",
+        "【浅眠】她像是听见了提示音，睫毛轻轻动了一下，又安静下来。",
+        "【睡眠中】房间很安静，她还缩在被子里，呼吸很轻。",
+        "【浅眠】她迷迷糊糊皱了下鼻子，像是想醒，又睡了回去。",
+        "【睡眠中】消息到了，但她睡得正沉，没有摸到手机。",
+    )
+    owner_dreams = (
+        "【梦境片段】“……你回来啦。”她含糊地嘟囔了一句。",
+        "【梦境片段】她像是梦到你走得太快，小声说：“等我一下……”",
+        "【梦境片段】“……不许跑。”她抱紧了被角，又没声音了。",
+        "【梦境片段】她眉头忽然松开一点，像是梦见了很熟悉的人。",
+        "【梦话】“……再陪我一会儿。”声音很轻，说完又睡沉了。",
+        "【梦话】“……离我近一点。”她含糊说完，把被子抱得更紧了。",
+    )
+    if owner and random.random() < 0.45:
+        return random.choice(owner_dreams)
+    return random.choice(sleep_lines)
 
 
 async def _post_reply_memory(*, person_id, text, chat_id, message_id):
@@ -153,6 +177,27 @@ async def mobile_chat(text: str, person: dict) -> dict:
     if text.startswith("/"):
         record_event("聊天指令", "手机端收到未识别指令")
         return {"ok": True, "reply": "这条指令我不认识，发 /help 看看能用哪些。"}
+
+    # 睡眠中不进入正常聊天模型。用户消息仍保存在私聊历史中，
+    # 这样醒来后萤能看到你睡觉时发过什么；睡眠片段本身不写入长期记忆。
+    life_before_chat = await get_life_state()
+    if life_before_chat.get("sleep_state") == "sleeping":
+        message_id = await _next_message_id()
+        await save_message(
+            "mobile", chat_id, str(person_id),
+            display_name, "user", text,
+            person_id=person_id, message_id=message_id,
+        )
+        sleep_reply = _sleep_interaction_reply(owner=(role == "OWNER"))
+        record_event("睡眠互动", "萤睡眠中收到软件消息，返回睡眠片段")
+        return {
+            "ok": True,
+            "reply": sleep_reply,
+            "sleeping": True,
+            "system": True,
+            "message_id": message_id,
+        }
+
     message_id = await _next_message_id()
 
     await save_message(

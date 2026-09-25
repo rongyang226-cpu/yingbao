@@ -1190,15 +1190,45 @@ def _private_wake_call(text: str) -> bool:
     return any(word.lower() in raw for word in wake_words)
 
 
+def _sleep_interaction_text(*, owner: bool, group: bool = False) -> str:
+    """睡眠门控的展示文本，不作为清醒聊天或真实事件记忆。"""
+    if group:
+        return random.choice((
+            "【睡眠中】萤现在还睡着，没有醒。",
+            "【睡眠中】她这会儿睡得很沉，没看到群里的消息。",
+            "【浅眠】像是听见有人叫她，但她翻了个身又睡回去了。",
+        ))
+
+    sleep_lines = (
+        "【睡眠中】萤还没醒，手机亮了一下又暗了。",
+        "【睡眠中】她翻了个身，把被子往怀里拢了拢，没有醒。",
+        "【浅眠】她像是听见了提示音，睫毛轻轻动了一下，又安静下来。",
+        "【睡眠中】房间很安静，她还缩在被子里，呼吸很轻。",
+        "【浅眠】她迷迷糊糊皱了下鼻子，像是想醒，又睡了回去。",
+        "【睡眠中】消息到了，但她睡得正沉，没有摸到手机。",
+    )
+    owner_dreams = (
+        "【梦境片段】“……你回来啦。”她含糊地嘟囔了一句。",
+        "【梦境片段】她像是梦到你走得太快，小声说：“等我一下……”",
+        "【梦境片段】“……不许跑。”她抱紧了被角，又没声音了。",
+        "【梦境片段】她眉头忽然松开一点，像是梦见了很熟悉的人。",
+        "【梦话】“……再陪我一会儿。”声音很轻，说完又睡沉了。",
+        "【梦话】“……离我近一点。”她含糊说完，把被子抱得更紧了。",
+    )
+    if owner and random.random() < 0.45:
+        return random.choice(owner_dreams)
+    return random.choice(sleep_lines)
+
+
 async def _sleep_reply_gate(update, context):
     """
-    True  = 本轮必须静默，不再进入聊天链路
+    True  = 本轮由睡眠门控接管，不再进入正常聊天链路
     False = 可以继续处理
 
     睡着时：
-    - 普通消息完全不回复；
-    - 私聊必须明显在叫萤；
-    - 群聊必须 @ / 回复萤 / 叫名字；
+    - 私聊任何消息都会得到睡眠状态/梦境片段，但不会正常聊天；
+    - 只有明显叫醒萤的消息才累计叫醒次数；
+    - 群聊只有 @ / 回复萤 / 叫名字时才显示通用睡眠状态，不泄露私密梦境；
     - 10 分钟内累计 3 次明确叫醒后才醒。
     """
     message = update.message
@@ -1215,17 +1245,50 @@ async def _sleep_reply_gate(update, context):
         return False, False
 
     text = message.text or ""
+    is_group = chat.type in ("group", "supergroup")
+    owner = is_owner("telegram", user.id)
 
-    if chat.type in ("group", "supergroup"):
+    # 私聊睡眠期间的来信仍保留在普通消息历史里，醒来后可以接着看到；
+    # 隐私模式 on/strict 继续遵守“不落盘”规则。
+    if not is_group:
+        mode = PRIVATE_MODE.get((chat.id, user.id), "off") if owner else "off"
+        if mode == "off":
+            try:
+                sleep_person = await get_or_create_person(
+                    platform="telegram",
+                    user_id=user.id,
+                    username=user.username,
+                    display_name=user.full_name,
+                )
+                await save_message(
+                    "telegram",
+                    chat.id,
+                    user.id,
+                    user.username or user.full_name,
+                    "user",
+                    text,
+                    person_id=sleep_person["person_id"],
+                    message_id=message.message_id,
+                )
+            except Exception:
+                log.exception("Failed to persist message received during sleep")
+
+    if is_group:
         direct = await is_direct_group_message(
             update,
             context,
         )
+        if not direct:
+            return True, False
+        wake_call = True
     else:
-        direct = _private_wake_call(text)
-
-    if not direct:
-        return True, False
+        # 私聊普通消息也会有睡眠反馈，但只有明确叫她才算叫醒。
+        wake_call = _private_wake_call(text)
+        if not wake_call:
+            await message.reply_text(
+                _sleep_interaction_text(owner=owner, group=False)
+            )
+            return True, False
 
     now_mono = asyncio.get_running_loop().time()
     calls = [
@@ -1236,7 +1299,12 @@ async def _sleep_reply_gate(update, context):
     SLEEP_WAKE_CALLS[chat.id] = calls
 
     if len(calls) < SLEEP_WAKE_REQUIRED:
-        # 真的睡着时，前两次叫她也不回。
+        await message.reply_text(
+            _sleep_interaction_text(
+                owner=owner,
+                group=is_group,
+            )
+        )
         return True, False
 
     SLEEP_WAKE_CALLS.pop(chat.id, None)
