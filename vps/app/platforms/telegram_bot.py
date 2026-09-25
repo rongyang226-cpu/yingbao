@@ -398,6 +398,11 @@ def finish_cat_paragraphs(text: str) -> str:
     return "".join(result)
 
 
+async def reply_cat(message, text, **kwargs):
+    """Apply the persona ending to TG text responses, including direct commands."""
+    return await message.reply_text(finish_cat_paragraphs(text), **kwargs)
+
+
 def _looks_like_search_placeholder(text: str) -> bool:
     t = re.sub(r"\s+", "", str(text or ""))
     if not t:
@@ -443,7 +448,7 @@ async def cmd_start(
     else:
         text = "嗯？我在。发 /help 看看能做什么。"
 
-    await update.message.reply_text(text)
+    await reply_cat(update.message, text)
 
 
 
@@ -453,7 +458,7 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     query = " ".join(context.args).strip()
     await audit("telegram", user.id, ("/help " + query).strip(), True)
-    await update.message.reply_text(
+    await reply_cat(update.message,
         help_text("telegram", is_owner("telegram", user.id), query=query)
     )
 
@@ -463,7 +468,7 @@ async def cmd_commands(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not update.message:
         return
     await audit("telegram", user.id, "/commands", True)
-    await update.message.reply_text(
+    await reply_cat(update.message,
         help_text("telegram", is_owner("telegram", user.id), full=True)
     )
 
@@ -477,7 +482,7 @@ async def cmd_time(update: Update, context: ContextTypes.DEFAULT_TYPE):
     own_time = datetime.fromisoformat(home["tokyo_time"])
     beijing_time = datetime.fromisoformat(home["zhengzhou_time"])
     await audit("telegram", user.id, "/time", True)
-    await update.message.reply_text(
+    await reply_cat(update.message,
         "萤的时间\n"
         f"{own_city}：{own_time.strftime('%Y-%m-%d %H:%M:%S')}\n"
         f"北京时间：{beijing_time.strftime('%Y-%m-%d %H:%M:%S')}"
@@ -490,7 +495,7 @@ async def cmd_me(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     owner = is_owner("telegram", user.id)
     await audit("telegram", user.id, "/me", True)
-    await update.message.reply_text(
+    await reply_cat(update.message,
         "当前身份\n"
         f"称呼：{user.full_name or user.username or '未命名'}\n"
         f"平台：Telegram\n"
@@ -504,7 +509,7 @@ async def cmd_version(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not user or not update.message:
         return
     await audit("telegram", user.id, "/version", True)
-    await update.message.reply_text(
+    await reply_cat(update.message,
         f"萤 · 统一指令集 v{COMMAND_MANUAL_VERSION}\n"
         "TG 与软件端共用同一份指令说明。"
     )
@@ -517,18 +522,18 @@ async def cmd_reset(update: Update, context: ContextTypes.DEFAULT_TYPE):
     allowed = chat.type == "private" and str(chat.id) == str(user.id)
     await audit("telegram", user.id, "/reset", allowed)
     if not allowed:
-        await message.reply_text("只能在你与萤的私聊里清理这段消息记录。")
+        await reply_cat(message, "只能在你与萤的私聊里清理这段消息记录。")
         return
     count = await reset_private_chat_history("telegram", str(chat.id), str(user.id))
     PRIVATE_CONTEXT.pop((chat.id, user.id), None)
-    await message.reply_text(
+    await reply_cat(message,
         f"这段私聊的{count}条消息记录已清空。长期记忆和其他聊天还在。"
     )
 
 
 async def cmd_unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
-        await update.message.reply_text("这条指令我不认识，发 /help 看看能用哪些。")
+        await reply_cat(update.message, "这条指令我不认识，发 /help 看看能用哪些。")
 
 
 async def cmd_status(
@@ -551,7 +556,7 @@ async def cmd_status(
     )
 
     if not allowed:
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "这个你不能用。"
         )
         return
@@ -595,7 +600,7 @@ async def cmd_status(
     own_time = datetime.fromisoformat(home["tokyo_time"])
     beijing_time = datetime.fromisoformat(home["zhengzhou_time"])
 
-    await update.message.reply_text(
+    await reply_cat(update.message,
         "萤 · 当前状态\n\n"
         f"状态：{'睡着了' if sleeping else '醒着'}\n"
         f"正在做：{activity_zh}\n"
@@ -636,7 +641,7 @@ async def cmd_private(
     )
 
     if not allowed:
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "这个你不能用。"
         )
         return
@@ -653,7 +658,7 @@ async def cmd_private(
             "off"
         )
 
-        await update.message.reply_text(
+        await reply_cat(update.message,
             f"隐私模式：{mode}"
         )
         return
@@ -665,7 +670,7 @@ async def cmd_private(
             None
         )
 
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "隐私模式已关闭，"
             "临时上下文已清理。"
         )
@@ -675,7 +680,7 @@ async def cmd_private(
         PRIVATE_MODE[(chat.id, user.id)] = "strict"
         PRIVATE_CONTEXT[(chat.id, user.id)] = []
 
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "严格隐私模式已开启。\n"
             "不会读取普通历史，"
             "也不会保存这段聊天。"
@@ -685,7 +690,7 @@ async def cmd_private(
     PRIVATE_MODE[(chat.id, user.id)] = "on"
     PRIVATE_CONTEXT[(chat.id, user.id)] = []
 
-    await update.message.reply_text(
+    await reply_cat(update.message,
         "隐私模式已开启。\n"
         "这段聊天不会写入长期记录。"
     )
@@ -719,7 +724,7 @@ async def cmd_debug(
     )
 
     if not allowed:
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "这个你不能用。"
         )
         return
@@ -735,7 +740,7 @@ async def cmd_debug(
     if arg == "on":
         DEBUG_MODE[key] = True
         DEBUG_CONTEXT[key] = []
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "⚙️ SYSTEM\nDebug：ON"
         )
         return
@@ -743,20 +748,20 @@ async def cmd_debug(
     if arg == "off":
         DEBUG_MODE.pop(key, None)
         DEBUG_CONTEXT.pop(key, None)
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "⚙️ SYSTEM\nDebug：OFF"
         )
         return
 
     if arg == "status":
         enabled = DEBUG_MODE.get(key, False)
-        await update.message.reply_text(
+        await reply_cat(update.message,
             "⚙️ SYSTEM\n"
             f"Debug：{'ON' if enabled else 'OFF'}"
         )
         return
 
-    await update.message.reply_text(
+    await reply_cat(update.message,
         "⚙️ SYSTEM\n"
         "用法：/debug on | off | status"
     )
@@ -1137,7 +1142,7 @@ async def _route_game_command(
                 context,
             )
         else:
-            await update.effective_message.reply_text(
+            await reply_cat(update.effective_message,
                 "刚才没有能接着下的棋局啦。要不重新来一盘？"
             )
 
@@ -1313,7 +1318,7 @@ async def _sleep_reply_gate(update, context):
         # 私聊普通消息也会有睡眠反馈，但只有明确叫她才算叫醒。
         wake_call = _private_wake_call(text)
         if not wake_call:
-            await message.reply_text(
+            await reply_cat(message,
                 _sleep_interaction_text(owner=owner, group=False)
             )
             return True, False
@@ -1327,7 +1332,7 @@ async def _sleep_reply_gate(update, context):
     SLEEP_WAKE_CALLS[chat.id] = calls
 
     if len(calls) < SLEEP_WAKE_REQUIRED:
-        await message.reply_text(
+        await reply_cat(message,
             _sleep_interaction_text(
                 owner=owner,
                 group=is_group,
@@ -1349,7 +1354,7 @@ from app.activity.diary import read_today_daily_diary
 async def _send_requested_image(message, query: str):
     found = await find_image(query)
     if not found:
-        await message.reply_text("这次没找到能正常打开的图片。你换个关键词，我再找。")
+        await reply_cat(message, "这次没找到能正常打开的图片。你换个关键词，我再找。")
         return
     import io
     source = found.source
@@ -1368,14 +1373,14 @@ async def cmd_search(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     query = " ".join(context.args).strip()
     if not query:
-        await update.message.reply_text("发 /search 关键词，我去查。")
+        await reply_cat(update.message, "发 /search 关键词，我去查。")
         return
     try:
         found = await asyncio.wait_for(web_search(query, limit=5), timeout=35)
-        await update.message.reply_text(search_fallback_text(found), disable_web_page_preview=True)
+        await reply_cat(update.message, search_fallback_text(found), disable_web_page_preview=True)
     except Exception:
         log.exception("Direct search failed")
-        await update.message.reply_text("这次联网搜索没成功，我没拿到可靠结果。")
+        await reply_cat(update.message, "这次联网搜索没成功，我没拿到可靠结果。")
 
 
 async def cmd_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -1383,13 +1388,13 @@ async def cmd_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     query = " ".join(context.args).strip()
     if not query:
-        await update.message.reply_text("发 /image 关键词，我给你找一张图。")
+        await reply_cat(update.message, "发 /image 关键词，我给你找一张图。")
         return
     try:
         await _send_requested_image(update.message, query)
     except Exception:
         log.exception("Image delivery failed")
-        await update.message.reply_text("图片这次没发成功，稍后再试一下。")
+        await reply_cat(update.message, "图片这次没发成功，稍后再试一下。")
 
 
 async def handle_text(
@@ -1442,7 +1447,7 @@ async def handle_text(
                 await _send_requested_image(message, requested_image)
             except Exception:
                 log.exception("Natural image delivery failed")
-                await message.reply_text("图片这次没发成功，稍后再试一下。")
+                await reply_cat(message, "图片这次没发成功，稍后再试一下。")
             return
 
     # ===== OWNER 私人日记查询 =====
@@ -1465,11 +1470,11 @@ async def handle_text(
         diary_text = read_today_daily_diary()
 
         if diary_text:
-            await message.reply_text(
+            await reply_cat(message,
                 diary_text
             )
         else:
-            await message.reply_text(
+            await reply_cat(message,
                 "今天的正式日记还没写呢。"
             )
 
@@ -1508,7 +1513,7 @@ async def handle_text(
                             ),
                         )
                 else:
-                    await message.reply_text(
+                    await reply_cat(message,
                         duel_result.get(
                             "reply",
                             "这步好像不能这么走。",
@@ -1522,7 +1527,7 @@ async def handle_text(
                 "CHESS MOVE FAILED"
             )
 
-            await message.reply_text(
+            await reply_cat(message,
                 "这一步棋处理失败了，不过棋局还在。"
             )
             return
@@ -1620,7 +1625,7 @@ async def handle_text(
 
     # 非 OWNER 仍保持朋友边界；OWNER 的恋人身份由程序验证。
     if not owner and is_romance_escalation(text):
-        await message.reply_text(
+        await reply_cat(message,
             friend_only_reply()
         )
         return
@@ -1632,7 +1637,7 @@ async def handle_text(
         not owner
         and protected_request(text)
     ):
-        await message.reply_text(
+        await reply_cat(message,
             safe_refusal_text()
         )
         return
@@ -1657,7 +1662,7 @@ async def handle_text(
         )
 
         if life_log_kind:
-            await message.reply_text(
+            await reply_cat(message,
                 _format_owner_life_log_query(
                     life_log_kind
                 )
@@ -1808,7 +1813,7 @@ async def handle_text(
     # Debug 是纯测试沙盒：
     # 不读取、创建、取消或修改真实 Reminder。
     if debug and reminder_intent:
-        await message.reply_text(
+        await reply_cat(message,
             "⚙️ SYSTEM\n"
             "Debug 沙盒：Reminder 未执行，正式数据没有修改。"
         )
@@ -1849,7 +1854,7 @@ async def handle_text(
         )
 
         if not reminders:
-            await message.reply_text(
+            await reply_cat(message,
                 "现在没有未完成的提醒。"
             )
             return
@@ -1878,7 +1883,7 @@ async def handle_text(
                 f"• {when} {event['title']}"
             )
 
-        await message.reply_text(
+        await reply_cat(message,
             "\n".join(lines)
         )
         return
@@ -1888,7 +1893,7 @@ async def handle_text(
         title = extract_cancel_title(text)
 
         if not title:
-            await message.reply_text(
+            await reply_cat(message,
                 "要取消哪个提醒？"
             )
             return
@@ -1901,7 +1906,7 @@ async def handle_text(
         if result.get("ok"):
             event = result["event"]
 
-            await message.reply_text(
+            await reply_cat(message,
                 f"取消了「{event['title']}」提醒。"
             )
             return
@@ -1912,7 +1917,7 @@ async def handle_text(
                 for e in result["matches"][:5]
             ]
 
-            await message.reply_text(
+            await reply_cat(message,
                 "有几个提醒都对得上：\n"
                 + "\n".join(
                     f"• {name}"
@@ -1922,7 +1927,7 @@ async def handle_text(
             )
             return
 
-        await message.reply_text(
+        await reply_cat(message,
             f"没找到「{title}」这个未完成提醒。"
         )
         return
@@ -1937,7 +1942,7 @@ async def handle_text(
         # 用户明确取消上一轮未完成提醒
         if _cancel_pending_reminder(text):
             PENDING_REMINDERS.pop(reminder_key, None)
-            await message.reply_text("好，不提醒了。")
+            await reply_cat(message, "好，不提醒了。")
             return
 
         # 缺时间时，只接受“明显就是时间补充”的消息。
@@ -1968,7 +1973,7 @@ async def handle_text(
             if completed and completed.get("ok"):
                 if mode != "off":
                     PENDING_REMINDERS.pop(reminder_key, None)
-                    await message.reply_text(
+                    await reply_cat(message,
                         "隐私模式下不会保存提醒。"
                     )
                     return
@@ -2024,14 +2029,14 @@ async def handle_text(
                         f'{mention_name}</a>'
                     )
 
-                    await message.reply_text(
+                    await reply_cat(message,
                         f"{mention}，记住了。"
                         f"{display_due}提醒你"
                         f"{completed['title']}。",
                         parse_mode="HTML",
                     )
                 else:
-                    await message.reply_text(
+                    await reply_cat(message,
                         f"记住了，{display_due}"
                         f"提醒你{completed['title']}。"
                     )
@@ -2042,7 +2047,7 @@ async def handle_text(
 
     if reminder is not None:
         if mode != "off":
-            await message.reply_text(
+            await reply_cat(message,
                 "隐私模式下不会保存提醒。"
                 "关闭隐私模式后再让我记。"
             )
@@ -2071,11 +2076,11 @@ async def handle_text(
                 }
 
                 if reason == "imprecise_time":
-                    await message.reply_text(
+                    await reply_cat(message,
                         "可以，具体几点提醒你？"
                     )
                 else:
-                    await message.reply_text(
+                    await reply_cat(message,
                         "可以，什么时候提醒你？"
                     )
                 return
@@ -2088,7 +2093,7 @@ async def handle_text(
                     None
                 )
 
-                await message.reply_text(
+                await reply_cat(message,
                     "可以，不过你还没说要提醒什么。"
                 )
                 return
@@ -2145,14 +2150,14 @@ async def handle_text(
                 f'{mention_name}</a>'
             )
 
-            await message.reply_text(
+            await reply_cat(message,
                 f"{mention}，记住了。"
                 f"{display_due}提醒你"
                 f"{reminder['title']}。",
                 parse_mode="HTML",
             )
         else:
-            await message.reply_text(
+            await reply_cat(message,
                 f"记住了，{display_due}"
                 f"提醒你{reminder['title']}。"
             )
@@ -2345,7 +2350,7 @@ async def handle_text(
         # 程序已经能够确定答案，不再交给模型猜
         if route.handled:
             if route.answer:
-                sent = await message.reply_text(route.answer)
+                sent = await reply_cat(message, route.answer)
 
                 # Router 的直接回答也是萤真正说过的话。
                 # 只有普通模式才进入持久化聊天历史。
@@ -2897,7 +2902,7 @@ async def handle_text(
             # Search already finished: always deliver its verified results.
             answer = _build_search_fallback(route.data or {})
         else:
-            await message.reply_text("刚才连接没成功，我还在。你把那句再发我一次，好吗？")
+            await reply_cat(message, "刚才连接没成功，我还在。你把那句再发我一次，好吗？")
             return
 
     # 隐私模式只保存在 RAM
@@ -2937,7 +2942,7 @@ async def handle_text(
     if not outgoing_answer:
         return
 
-    sent = await message.reply_text(outgoing_answer)
+    sent = await reply_cat(message, outgoing_answer)
 
     # 普通模式：只记录真正发送成功的回复。
     if mode == "off" and not debug:
@@ -3053,12 +3058,12 @@ async def handle_media_metadata(update: Update, context: ContextTypes.DEFAULT_TY
     # The group=-1 archive handler has already stored this message once.
     if chat.type in ("group", "supergroup"):
         if await _is_direct_media_to_ying(message, context):
-            await message.reply_text(
+            await reply_cat(message,
                 "收到你发的图片或表情包了。我现在不识别画面；把你想问的内容打成文字，我会认真看，喵"
             )
         return
     if user and chat.type == "private":
-        await message.reply_text(
+        await reply_cat(message,
             "收到图片或表情包了。我现在不识别画面；把想让我看的内容用文字说给我，喵"
         )
 
@@ -3072,7 +3077,7 @@ async def cmd_chess(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if chat.type != "private":
-        await message.reply_text(
+        await reply_cat(message,
             "国际象棋陪玩先只支持私聊。"
         )
         return
@@ -3102,7 +3107,7 @@ async def cmd_chess(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     ),
                 )
         else:
-            await message.reply_text(
+            await reply_cat(message,
                 result.get(
                     "caption",
                     "棋局已经开始。",
@@ -3112,7 +3117,7 @@ async def cmd_chess(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as exc:
         log.exception("CHESS START FAILED")
 
-        await message.reply_text(
+        await reply_cat(message,
             "棋盘启动失败了，我这边已经记录错误。"
         )
 
@@ -3130,7 +3135,7 @@ async def cmd_chess_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user.id,
     )
 
-    await message.reply_text(
+    await reply_cat(message,
         "这盘先结束啦。"
         if ok
         else "现在没有进行中的棋局。"
@@ -3154,7 +3159,7 @@ async def cmd_chess_status(
     )
 
     if not status:
-        await message.reply_text(
+        await reply_cat(message,
             "现在没有进行中的棋局。"
         )
         return
@@ -3174,7 +3179,7 @@ async def cmd_chess_status(
                 caption=caption,
             )
     else:
-        await message.reply_text(
+        await reply_cat(message,
             caption
         )
 
