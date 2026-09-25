@@ -1,5 +1,12 @@
 import aiosqlite
+import hashlib
 from app.config import DB_PATH
+
+
+def group_identity_tag(chat_id, user_id):
+    """Stable, group-scoped speaker label; never identifies a person by nickname."""
+    raw = f"{chat_id}\0{user_id}".encode("utf-8")
+    return "成员#" + hashlib.blake2s(raw, digest_size=5).hexdigest()
 
 
 SCHEMA = """
@@ -315,11 +322,13 @@ async def get_history(
         # 群聊里必须保留“谁在说、在回复谁”，否则多人并行聊天
         # 很容易把不同人的上下文串在一起。
         if role == "assistant":
-            # 不把“回复给谁”写进 assistant 正文，避免模型学会并复读内部标签。
-            # 多人身份主要由用户发言标签、回复链和当前 speaker 约束。
+            target = (
+                f"[萤 -> {group_identity_tag(chat_id, reply_to_user_id)}] "
+                if platform == "telegram" and reply_to_user_id else ""
+            )
             history.append({
                 "role": "assistant",
-                "content": content,
+                "content": target + content,
             })
         else:
             if (
@@ -337,7 +346,13 @@ async def get_history(
                 ):
                     label += f" (@{speaker_username})"
 
-            if reply_to_name:
+            if platform == "telegram":
+                label = f"{group_identity_tag(chat_id, user_id)} {label}"
+                if reply_to_user_id:
+                    label += f" -> 回复 {group_identity_tag(chat_id, reply_to_user_id)} {reply_to_name or '成员'}"
+                elif reply_to_name:
+                    label += f" -> 回复 {reply_to_name}"
+            elif reply_to_name:
                 label += f" -> 回复 {reply_to_name}"
             history.append({
                 "role": "user",
