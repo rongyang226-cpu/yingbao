@@ -674,6 +674,46 @@ async def get_weather_for_place(place_name):
     }
 
 
+def format_weather_reply(result, day="today"):
+    """Use only observed/forecast fields returned for the resolved location."""
+    place = result.get("place") or {}
+    weather = result.get("weather") or {}
+    city = str(place.get("name") or result.get("requested_place") or "该地区")
+    requested = str(result.get("requested_place") or city)
+    lookup = str(result.get("lookup_place") or city)
+    region = f"{city}（{place['country']}）" if place.get("country") and city != place.get("country") else city
+    def value(key, suffix=""):
+        x = weather.get(key)
+        return f"{x}{suffix}" if x is not None else None
+    def temperatures(low, high):
+        a, b = value(low), value(high)
+        if a is not None and b is not None:
+            return f"{a}～{b}℃"
+        return f"最低{a}℃" if a is not None else (f"最高{b}℃" if b is not None else None)
+    if day == "tomorrow":
+        parts = [value("tomorrow_weather"), temperatures("tomorrow_min", "tomorrow_max")]
+        rain = value("tomorrow_rain_probability", "%")
+        if rain is not None: parts.append(f"最高降雨概率{rain}")
+        prefix = f"{region}明天预计："
+    else:
+        parts = [value("weather"), value("temperature", "℃")]
+        feel = value("apparent_temperature", "℃")
+        if feel is not None: parts.append(f"体感{feel}")
+        overall = value("today_weather")
+        if overall is not None: parts.append(f"今日预报{overall}")
+        range_text = temperatures("today_min", "today_max")
+        if range_text is not None: parts.append(range_text)
+        rain = value("today_rain_probability", "%")
+        if rain is not None: parts.append(f"最高降雨概率{rain}")
+        observed = str(weather.get("time") or "").replace("T", " ")[:16]
+        prefix = f"{region}当地时间{observed}：" if observed else f"{region}目前："
+    parts = [x for x in parts if x]
+    if not parts:
+        return f"{city}这次没拿到可用的天气数据，稍后再查。"
+    note = f"（按{lookup}区域天气数据）" if requested != lookup else ""
+    return prefix + "，".join(parts) + note + "。数据来源：Open-Meteo。"
+
+
 def _nominatim_geocode_sync(place_name):
     params = {
         "q": place_name,

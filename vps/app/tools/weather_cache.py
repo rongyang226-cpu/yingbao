@@ -45,7 +45,7 @@ import json
 from datetime import timedelta
 
 
-CACHE_HOURS = 3
+CACHE_HOURS = 0.5
 
 
 async def get_cached_weather(cache_key):
@@ -69,10 +69,12 @@ async def get_cached_weather(cache_key):
             FROM weather_cache
             WHERE cache_key=?
               AND expires_at > ?
+              AND fetched_at > ?
             """,
             (
                 cache_key,
                 now.isoformat(),
+                (now - timedelta(minutes=30)).isoformat(),
             )
         )
 

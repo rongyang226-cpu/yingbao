@@ -16,7 +16,7 @@ from app.memory.search import (
     search_messages_cn,
 )
 
-from app.tools.weather_tool import get_weather_for_place
+from app.tools.weather_tool import get_weather_for_place, format_weather_reply
 from app.tools.web_search_tool import web_search
 
 
@@ -88,29 +88,26 @@ async def dispatch(
             data=result,
         )
 
-    # ===== 天气 =====
+    if intent.type == "weather_missing_place":
+        return RouteResult(intent=intent, handled=True, answer="想查哪个城市的天气？比如北京或东京。")
+
+    # ===== 天气：用查到的数据直接作答，避免模型反说“查不到” =====
     if intent.type == "weather":
-        weather_result = await get_weather_for_place(
-            intent.query
-        )
-
-        if not weather_result:
+        try:
+            result = await asyncio.wait_for(get_weather_for_place(intent.query), timeout=25)
+        except Exception:
             return RouteResult(
-                intent=intent,
-                handled=False,
-                data={
-                    "error": "weather_place_not_found",
-                    "query": intent.query,
-                },
+                intent=intent, handled=True,
+                answer=f"{intent.query}的天气服务暂时连接不上，这次没有实时数据。稍后再查。",
             )
-
+        if not result:
+            return RouteResult(
+                intent=intent, handled=True,
+                answer=f"没找到「{intent.query}」对应的地点。可以换成城市名再问我。",
+            )
         return RouteResult(
-            intent=intent,
-            handled=False,
-            data={
-                "weather": weather_result,
-                "day": intent.target or "today",
-            },
+            intent=intent, handled=True,
+            answer=format_weather_reply(result, intent.target or "today"),
         )
 
     # ===== 最近消息查询 =====

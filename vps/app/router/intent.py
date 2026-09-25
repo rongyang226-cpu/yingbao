@@ -133,6 +133,10 @@ def _extract_weather_place(text: str):
     if "天气" not in t and "温度" not in t and "下雨" not in t:
         return None
 
+    # 萤/莹在句首是称呼，不是地名。也接受用户常见的错字。
+    import re
+    t = re.sub(r"^(?:嗨|喂|嘿)?(?:萤|莹|莹宝|萤宝)[，,、：: ]*", "", t)
+
     if any(x in t for x in ("你那边", "你那里", "东京")):
         return "东京"
 
@@ -186,9 +190,14 @@ def _extract_weather_place(text: str):
 
     cleaned = cleaned.strip(" ，,。！？!?")
     cleaned = cleaned.rstrip("吗嘛呢呀啊").strip()
+    cleaned = re.sub(r"[，,、：: ]*(?:萤|莹|莹宝|萤宝)$", "", cleaned).strip()
+    cleaned = re.sub(r"(?:那边|那儿|那里|这边|这儿|这里)(?:的)?$", "", cleaned).rstrip("的").strip()
 
     if cleaned:
         return cleaned
+    # 明确叫萤问天气时，以她目前虚拟生活所在的东京为默认地点。
+    if re.match(r"^(?:嗨|喂|嘿)?(?:萤|莹|莹宝|萤宝)", _normalize(text)):
+        return "东京"
 
     return None
 
@@ -258,6 +267,11 @@ def detect_intent(text: str) -> Intent:
                 target=_weather_day(text),
                 confidence=0.99,
             )
+        if any(x in text for x in (
+            "天气怎么样", "天气如何", "天气预报", "今天天气", "明天天气",
+            "几度", "多少度", "会下雨", "下雨吗", "查天气", "天气呢",
+        )):
+            return Intent(type="weather_missing_place")
 
 
     # ===== 明确联网搜索 / 明确最新信息 =====
