@@ -88,7 +88,7 @@ async def ensure_person_state(person_id: int):
             """,
             (person_id, t, t)
         )
-        # 新建 OWNER 状态时，稳定关系已经是同居恋人，不再从陌生阶段起步。
+        # OWNER 是长期熟悉的搭档，新状态保留已有相处的熟悉度。
         # 只在尚未发生任何互动时设定一次基础值；之后的细微关系波动仍由真实互动驱动。
         await db.execute("""
             UPDATE relationship_state
@@ -117,7 +117,7 @@ async def ensure_person_state(person_id: int):
               )
         """, (person_id, person_id))
 
-        # 非 OWNER 永远没有恋人 attachment。
+        # 非 OWNER 没有 OWNER 专属的依恋度。
         # 即使旧版本数据、误写或未来其他模块写入，也会被这里归零。
         await db.execute("""
             UPDATE relationship_state
@@ -298,7 +298,7 @@ def relationship_stage(
         and trust >= 95
         and attachment >= 95
     ):
-        return "唯一恋人"
+        return "最熟的搭档"
 
     if (
         closeness >= 90

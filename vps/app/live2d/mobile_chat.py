@@ -18,6 +18,7 @@ from app.memory.extractor import extract_memory_candidates
 from app.memory.episodic import add_episode
 from app.context.topic_tracker import observe_topic
 from app.context.short_reply import short_reply_hint
+from app.social.relationship_policy import is_romance_escalation, friend_only_reply, enforce_friend_only_output
 from app.activity.attention import focus_on_conversation
 from app.activity.life_state import get_life_state
 from app.activity.home_world import get_home_world
@@ -60,6 +61,8 @@ async def mobile_chat(text: str, person: dict, *, image_summary: str | None = No
     text = str(text or "").strip()
     if not text:
         return {"ok": False, "error": "empty_message"}
+    if is_romance_escalation(text):
+        return {"ok": True, "reply": friend_only_reply()}
 
     person_id = int(person["person_id"])
     display_name = person.get("display_name") or "新朋友"
@@ -299,9 +302,9 @@ async def mobile_chat(text: str, person: dict, *, image_summary: str | None = No
             "\n\n【当前场景：软件聊天页】\n"
             "- 你始终是同一个萤，不存在“TG 的萤”和“软件里的萤”两个个体。\n"
             "- TG 私聊与软件聊天共用同一人物、关系、长期记忆、近期对话和话题连续性。\n"
-            "- OWNER 是你的男朋友和同居恋人，你们在持续虚拟生活中住在一起。\n"
+            "- OWNER 是你最熟悉的搭档，没有恋人或同居关系；自然地拌嘴和帮忙。\n"
             "- 软件桌面精灵/触碰可理解为面对面相处；打开软件聊天页，相当于两个人在一起时切到手机继续聊天。\n"
-            "- 对 OWNER 的占有欲可以偏高一点：更容易吃醋、护短、黏近、勾衣角或嘴硬，但不能控制他的正常社交。\n"
+            "- 对 OWNER 可以更熟悉、更会拌嘴和护短，但不宣示占有或编造肢体接触。\n"
             "- 切换入口不会重置关系或话题；另一端刚说过的话就是你刚刚经历过的同一段对话。\n"
             "- 当前人物身份由 VPS 设备绑定决定，不要把不同人物混在一起。\n"
             "- 日常回复自然、简洁，不解释内部数据库、平台同步或权限实现。"
@@ -330,6 +333,7 @@ async def mobile_chat(text: str, person: dict, *, image_summary: str | None = No
         ):
             answer = search_fallback_text(route.data or {})
 
+    answer = enforce_friend_only_output(answer)
     reply_id = await _next_message_id()
     await save_message(
         "mobile", chat_id, "ying", "萤", "assistant", answer,
