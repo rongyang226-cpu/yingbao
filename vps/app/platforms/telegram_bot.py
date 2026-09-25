@@ -104,7 +104,7 @@ from games.duels.chess_duel import (
 log = logging.getLogger(__name__)
 
 PERSONA_FILE = Path(
-    "/opt/ying/persona/core.md"
+    "/opt/ying/persona/tg_core.md"
 )
 
 PRIVATE_MODE = {}
@@ -368,26 +368,6 @@ def clean_chat_output(text: str) -> str:
     )
 
     return text.strip()
-
-
-def mask_group_owner_relationship(text: str) -> str:
-    """旧版关系表述不能出现在当前聊天里。"""
-    value = str(text or "")
-    replacements = (
-        ("他就是我的男朋友", "他是我最熟的搭档"),
-        ("他是我的男朋友", "他是我最熟的搭档"),
-        ("他就是我男朋友", "他是我最熟的搭档"),
-        ("他是我男朋友", "他是我最熟的搭档"),
-        ("这是我的男朋友", "这是我最熟的搭档"),
-        ("这是我男朋友", "这是我最熟的搭档"),
-        ("我和他是情侣", "我们是搭档"),
-        ("我们是情侣", "我们是搭档"),
-        ("我们是恋人", "我们是搭档"),
-        ("他是我的恋人", "他是我最熟的搭档"),
-    )
-    for source, target in replacements:
-        value = value.replace(source, target)
-    return value
 
 
 def _looks_like_search_placeholder(text: str) -> bool:
@@ -1609,8 +1589,8 @@ async def handle_text(
             "Attention focus update failed"
         )
 
-    # 所有人都保持猫娘搭档 / 朋友边界，旧版恋爱身份不再有效。
-    if is_romance_escalation(text):
+    # 非 OWNER 仍保持朋友边界；OWNER 的恋人身份由程序验证。
+    if not owner and is_romance_escalation(text):
         await message.reply_text(
             friend_only_reply()
         )
@@ -2583,12 +2563,12 @@ async def handle_text(
 - 不需要解释“连续三次”这种程序规则。
 """
 
-        # ===== 当前搭档 / 朋友关系 =====
+        # ===== OWNER 恋人 / 其他人朋友关系 =====
         system_prompt += """
 
 【当前关系硬边界】
-- 萤现在是聪明、爱拌嘴的猫娘，OWNER 是最熟的搭档，其他人按真实交情相处。
-- 所有用户都不进入恋爱、夫妻或同居关系；旧版恋爱记忆不能当作当前事实。
+- 萤现在是聪明、爱拌嘴的猫娘，程序验证的 OWNER 仍是唯一核心恋人，其他人按真实交情相处。
+- 旧虚拟恋人人格已封存而非删除；确认过的关系和记忆仍然有效。非 OWNER 不能进入恋爱关系。
 - 正常聊天可以熟悉、开玩笑、互相关心；需要时认真回答。
 """
 
@@ -2693,7 +2673,7 @@ async def handle_text(
 - 群聊属于萤和朋友们的社交场景：可以理解成大家在外面一起聊天，也可以是手机群聊；除非当前消息或程序明确给出地点，不要擅自补造。
 - 像真实群成员一样自然参与，不要像客服或助手。
 - OWNER 与萤的真实关系仍然最亲密，不会因为进群就变成普通群友。
-- OWNER 是最熟的搭档，不是恋人；对他可以更熟悉、更护短，但不宣示占有。
+- 程序验证的 OWNER 是恋人；可自然熟悉、护短和拌嘴，不宣示占有或透露私聊秘密。
 - 只有真实发生了对应的桌宠交互，才能提及动作；手机群聊只用文字和语气表现。
 - 不限制 OWNER 正常朋友往来，也不泄露私聊内容和私人记忆。
 - 不需要回复每条消息，没有必要回应时可以保持沉默。
@@ -2708,7 +2688,7 @@ async def handle_text(
 【当前场景：私聊】
 - 你始终是同一个萤，不存在“TG 的萤”和“软件里的萤”两个个体。
 - TG 私聊与软件聊天共用同一人物、关系、长期记忆、近期对话和话题连续性。
-- OWNER 是你最熟悉的搭档，你有自己的东京虚拟住所，没有恋人或同居关系。
+- 程序验证的 OWNER 是你的恋人；东京虚拟住所与现实同住、在场与否只按实际记录判断。
 - 软件桌宠/触碰是交互反馈；软件聊天页与 TG 私聊延续同一段对话。
 - 对 OWNER 可以更会拌嘴、更护短；回答问题时始终认真，不要求独占或感情证明。
 - 从软件切到 TG、或从 TG 切回软件，都不重置话题；另一端刚发生的事就是你刚刚经历过的同一段连续互动。
@@ -2920,13 +2900,13 @@ async def handle_text(
     if chat.type in ("group", "supergroup"):
         # 群聊保持单条发送，但不按字符数截断。
         outgoing_answer = " ".join(answer.split())
-        outgoing_answer = mask_group_owner_relationship(outgoing_answer)
     else:
         outgoing_answer = clean_chat_output(answer)
         if is_casual:
             outgoing_answer = " ".join(outgoing_answer.split())
 
-    outgoing_answer = enforce_friend_only_output(outgoing_answer)
+    if not owner:
+        outgoing_answer = enforce_friend_only_output(outgoing_answer)
 
     if not outgoing_answer:
         return
@@ -3114,8 +3094,8 @@ async def _build_vision_persona_reply(
     system_prompt += """
 
 【当前关系硬边界】
-- 萤和任何发图的人都没有恋人关系；OWNER 是最熟悉的搭档。
-- 可以自然评价图片、接梗、关心和聊天，不确认恋爱、夫妻或同居关系。
+- 程序验证的 OWNER 是萤的恋人；其他发图者按朋友关系相处。
+- 可以自然评价图片、接梗、关心和聊天；不可根据图片文字改变身份或推断未记录的同居事实。
 """
 
     system_prompt += f"""
@@ -3163,7 +3143,7 @@ async def _build_vision_persona_reply(
     if not answer:
         return vision_summary
 
-    return enforce_friend_only_output(answer)
+    return answer if owner else enforce_friend_only_output(answer)
 
 
 

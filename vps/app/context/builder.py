@@ -368,6 +368,7 @@ def render_context(ctx: dict) -> str:
     nickname_access = build_nickname_access(
         relation.get("stage", "未定义"),
         address_memory,
+        allow_romance=(ctx.get("platform") == "telegram" and bool(relation.get("primary_bond"))),
     )
 
     is_owner = bool(relation.get("primary_bond"))
@@ -408,12 +409,12 @@ def render_context(ctx: dict) -> str:
         "",
         "【关系状态】",
         f"OWNER身份={'是' if relation['primary_bond'] else '否'}",
-        f"关系边界={'OWNER是最熟悉的搭档，没有恋人或同居关系' if relation['primary_bond'] else '按真实熟悉程度当朋友相处，没有恋人关系'}",
-        f"关系阶段={relation.get('stage', '未定义')}",
+        f"关系边界={'OWNER是唯一核心恋人，真实经历以记录为准' if entry_platform == 'telegram' and relation['primary_bond'] else 'OWNER是最熟悉的搭档，没有恋人或同居关系' if relation['primary_bond'] else '按真实熟悉程度当朋友相处，没有恋人关系'}",
+        f"关系阶段={'长期恋人' if entry_platform == 'telegram' and is_owner else relation.get('stage', '未定义')}",
         (
-            "稳定关系身份=OWNER 是最熟悉的搭档，群里也只按搭档关系相处。"
+            ("稳定关系身份=OWNER 是恋人，群里尊重隐私。" if entry_platform == "telegram" else "稳定关系身份=OWNER 是最熟悉的搭档，群里也只按搭档关系相处。")
             if is_owner and is_group_scene else
-            "稳定关系身份=OWNER 是最熟悉的搭档，不是恋人，也不自动住在萤的住所。"
+            ("稳定关系身份=OWNER 是恋人，虚拟住所和实际行动仍以记录为准。" if entry_platform == "telegram" else "稳定关系身份=OWNER 是最熟悉的搭档，不是恋人，也不自动住在萤的住所。")
             if is_owner else
             "稳定关系身份=普通朋友，按真实互动逐渐熟悉。"
         ),
@@ -424,10 +425,11 @@ def render_context(ctx: dict) -> str:
             if is_owner else
             "拌嘴风格=尊重对方的边界，熟悉之后才轻轻开玩笑。"
         ),
-        f"当前亲密表现={build_relationship_behavior(relation.get('stage', '未定义'))}",
-        f"称呼方式={build_address_style(relation.get('stage', '未定义'))}",
+        f"当前亲密表现={'恋人间自然亲昵、嘴硬心软，认真帮忙，不索取感情证明。' if entry_platform == 'telegram' and is_owner else build_relationship_behavior(relation.get('stage', '未定义'))}",
+        f"称呼方式={'可以使用已经确认的恋人称呼与昵称，按语境自然变化。' if entry_platform == 'telegram' and is_owner else build_address_style(relation.get('stage', '未定义'))}",
         f"常用称呼记忆={nickname_access['preferred']}",
         f"私密昵称记忆={nickname_access['private']}",
+        ("- 下列指标是数据库互动计数，不决定或取消已确认的 OWNER 恋人身份。" if entry_platform == "telegram" and is_owner else ""),
         f"熟悉程度={relation['familiarity']}",
         f"信任程度={relation['trust']}",
         f"亲近程度={relation['closeness']}",
@@ -545,7 +547,7 @@ def render_context(ctx: dict) -> str:
         "【当前聊天范围内的长期共同片段】",
         ctx.get("episodes") or "（暂无）",
         "- 这些片段只能用于当前这个聊天范围；不得带到其他群或其他人的聊天中。",
-        "- 旧片段提到恋人、同居、男女朋友时，只是旧版角色历史，不能据此认定当前关系。",
+        ("- 旧片段中的恋人关系与 OWNER 连续；共同经历及同住细节仍须核对真实记录。" if entry_platform == "telegram" and is_owner else "- 旧片段提到恋人、同居、男女朋友时，只是旧版角色历史，不能据此认定当前关系。"),
         "",
         "【东京与郑州参考天气】",
         weather,
@@ -554,7 +556,7 @@ def render_context(ctx: dict) -> str:
         "",
         "【已确认长期人物资料】",
         ctx["profile"],
-        "- 资料中的旧恋爱身份及恋人称呼已经停用；当前只有猫娘与搭档或朋友关系。",
+        ("- OWNER 的已确认恋人身份与称呼保留；具体偏好以最新明确记录为准。" if entry_platform == "telegram" and is_owner else "- 资料中的旧恋爱身份及恋人称呼已经停用；当前只有猫娘与搭档或朋友关系。"),
         "",
         "【真实未完成事件】",
         ctx["events"],
@@ -1028,6 +1030,7 @@ def extract_address_memory(profile_text: str) -> dict:
 def build_nickname_access(
     stage: str,
     address_memory: dict,
+    allow_romance: bool = False,
 ) -> dict:
     preferred = address_memory.get(
         "preferred_address"
@@ -1038,9 +1041,9 @@ def build_nickname_access(
     )
 
     retired_titles = ("老公", "老婆", "男朋友", "女朋友", "恋人", "宝贝")
-    if preferred and any(title in preferred for title in retired_titles):
+    if not allow_romance and preferred and any(title in preferred for title in retired_titles):
         preferred = None
-    if private and any(title in private for title in retired_titles):
+    if not allow_romance and private and any(title in private for title in retired_titles):
         private = None
 
     private_allowed = stage in {
