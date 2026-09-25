@@ -125,6 +125,7 @@ const env = loadEnv(
 );
 
 const ownerOpenId = env.QQBOT_OWNER_OPENID;
+const groupReplyAt = new Map();
 
 if (!ownerOpenId)
     throw new Error("QQBOT_OWNER_OPENID missing");
@@ -229,6 +230,8 @@ bot.on("message", async (_ctx, msg) => {
 
         const isOwner =
             senderId === ownerOpenId;
+        const cooldownKey = `${target.targetId}:${senderId}`;
+        const bridgeCooldown = Date.now() - (groupReplyAt.get(cooldownKey) || 0) < 60000;
 
         const reference = msg?.raw?.message_reference || msg?.raw?.reply || null;
         const referencedAuthor = reference?.author || null;
@@ -262,6 +265,7 @@ bot.on("message", async (_ctx, msg) => {
 
                     mentioned_bot: mentionedBot,
                     mentions_other: mentions.some(m => m?.is_you !== true),
+                    bridge_cooldown: bridgeCooldown,
                     replied_message_id: reference?.message_id || reference?.id || null,
                     reply_to_user_id: referencedOpenId
                         ? (referencedOpenId === ownerOpenId ? "913565158" : referencedOpenId)
@@ -292,6 +296,7 @@ bot.on("message", async (_ctx, msg) => {
                 target,
                 content: reply,
             });
+            groupReplyAt.set(cooldownKey, Date.now());
 
             console.log(
                 "GROUP SEND = PASS"

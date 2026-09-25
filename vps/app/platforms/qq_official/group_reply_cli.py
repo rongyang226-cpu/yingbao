@@ -20,6 +20,7 @@ async def main():
         reply_to_user_id=data.get("reply_to_user_id"),
         reply_to_name=data.get("reply_to_name"),
         mentions_other=bool(data.get("mentions_other")),
+        bridge_cooldown=bool(data.get("bridge_cooldown")),
         is_owner=bool(data.get("is_owner")),
     )
 

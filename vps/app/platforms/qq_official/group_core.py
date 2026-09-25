@@ -19,6 +19,7 @@ async def run_group_message(
     reply_to_user_id: str | None = None,
     reply_to_name: str | None = None,
     mentions_other: bool = False,
+    bridge_cooldown: bool = False,
     is_owner: bool = False,
 ):
     """
@@ -73,6 +74,7 @@ async def run_group_message(
             "reply_to_user_id": reply_to_user_id,
             "reply_to_name": reply_to_name,
             "mentions_other": bool(mentions_other),
+            "bridge_cooldown": bool(bridge_cooldown),
         }
 
         await legacy.handle_qq_group(None, msg)

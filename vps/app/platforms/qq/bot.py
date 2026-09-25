@@ -903,6 +903,10 @@ def should_reply_qq_group(msg):
     ):
         return True
 
+    # 官方 QQ 桥接每条消息新启 Python，冷却由常驻桥接进程传入。
+    if msg.get("bridge_cooldown"):
+        return False
+
     group_id = str(msg.get("group_id") or "")
     user_id = str(msg.get("user_id") or "")
 
@@ -1056,10 +1060,10 @@ async def handle_qq_group(ws, msg):
     system_prompt += "\n\n" + QQ_NATURAL_STYLE_RULES
 
     system_prompt += (
-        "\\n\\n【QQ群聊当前发言者】\\n"
-        f"QQ号：{user_id}\\n"
-        f"名字：{nickname}\\n"
-        f"身份：{'主人' if person.get('role') == 'OWNER' else '普通群友'}\\n"
+        "\n\n【QQ群聊当前发言者】\n"
+        f"QQ号：{user_id}\n"
+        f"名字：{nickname}\n"
+        f"身份：{'主人' if person.get('role') == 'OWNER' else '普通群友'}\n"
         "当前消息的QQ号是最高优先级身份锚点。"
         "只能把当前消息归属于这个QQ号对应的人。"
         "不要继承上一条消息的说话人身份。"
