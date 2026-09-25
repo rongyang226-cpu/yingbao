@@ -667,19 +667,46 @@ async def viewer():
     return FileResponse(WEB_DIR / "index.html", headers={"Cache-Control": "no-store"})
 
 
-@app.get("/download/Yingbao.apk")
-async def download_apk():
-    apk = ROOT / "android" / "YingbaoApp" / "build" / "Yingbao.apk"
-    if not apk.exists():
+@app.get("/viewer-compat")
+async def viewer_compat():
+    return FileResponse(WEB_DIR / "index_compat.html", headers={"Cache-Control": "no-store"})
+
+
+def _apk_download(path: Path, filename: str):
+    if not path.exists():
         raise HTTPException(status_code=404, detail="apk_not_built")
     return FileResponse(
-        apk,
-        media_type="application/octet-stream",
-        filename="Yingbao.apk",
+        path,
+        media_type="application/vnd.android.package-archive",
+        filename=filename,
         headers={
-            "Content-Disposition": "attachment; filename=Yingbao.apk",
+            "Content-Disposition": f'attachment; filename="{filename}"',
             "Cache-Control": "no-store",
         },
+    )
+
+
+@app.get("/download/Yingbao.apk")
+async def download_apk():
+    return _apk_download(
+        ROOT / "android" / "YingbaoApp" / "build" / "Yingbao.apk",
+        "Yingbao.apk",
+    )
+
+
+@app.get("/download/Yingbao-normal.apk")
+async def download_apk_normal():
+    return _apk_download(
+        ROOT / "android" / "YingbaoApp" / "build" / "Yingbao-normal.apk",
+        "Yingbao-normal.apk",
+    )
+
+
+@app.get("/download/Yingbao-compat.apk")
+async def download_apk_compat():
+    return _apk_download(
+        ROOT / "android" / "YingbaoCompat" / "build" / "Yingbao-compat.apk",
+        "Yingbao-compat.apk",
     )
 
 
