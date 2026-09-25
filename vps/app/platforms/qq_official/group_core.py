@@ -15,6 +15,10 @@ async def run_group_message(
     message_id: str | None,
     mentioned_bot: bool = False,
     replied_to_bot: bool = False,
+    replied_message_id: str | None = None,
+    reply_to_user_id: str | None = None,
+    reply_to_name: str | None = None,
+    mentions_other: bool = False,
     is_owner: bool = False,
 ):
     """
@@ -65,6 +69,10 @@ async def run_group_message(
             "message_id": message_id,
             "mentioned_bot": bool(mentioned_bot),
             "replied_to_bot": bool(replied_to_bot),
+            "replied_message_id": replied_message_id,
+            "reply_to_user_id": reply_to_user_id,
+            "reply_to_name": reply_to_name,
+            "mentions_other": bool(mentions_other),
         }
 
         await legacy.handle_qq_group(None, msg)

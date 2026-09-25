@@ -46,6 +46,7 @@ from app.social.profile_observer import observe_message
 from app.social.interaction_events import apply_interaction_signals
 from app.context.topic_tracker import observe_topic
 from app.context.short_reply import short_reply_hint
+from app.context.group_digest import group_digest, update_group_media_summary
 from app.memory.extractor import extract_memory_candidates
 from app.memory.maintenance import maintain_long_term_memory
 from app.memory.episodic import add_episode, maintain_episodic_memory
@@ -239,6 +240,38 @@ def _reply_target_identity(replied, chat_id):
         name = f"{name} (@{username})"
 
     return str(replied_user.id), name
+
+
+async def _archive_group_input(message, user, chat, content):
+    """Persist every delivered group input before any reply or sleep gate."""
+    uid = user.id
+    username = user.username
+    display = user.full_name
+    if username == "GroupAnonymousBot":
+        signature = (getattr(message, "author_signature", None) or "").strip()
+        uid = f"anon:{chat.id}:{signature or 'anonymous_admin'}"
+        username = None
+        display = f"匿名管理员（{signature}）" if signature else "匿名管理员"
+    person = await get_or_create_person(
+        platform="telegram", user_id=uid, username=username, display_name=display,
+    )
+    replied = message.reply_to_message
+    target_uid, target_name = _reply_target_identity(replied, chat.id)
+    return await save_message(
+        "telegram", chat.id, uid, username or display, "user", content,
+        person_id=person["person_id"], message_id=message.message_id,
+        reply_to_message_id=(replied.message_id if replied else None),
+        reply_to_user_id=target_uid, reply_to_name=target_name,
+    )
+
+
+async def archive_group_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Record group commands, then let the normal command handler run."""
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    if message and chat and user and message.text:
+        await _archive_group_input(message, user, chat, message.text)
 
 
 def _cancel_pending_reminder(text: str) -> bool:
@@ -703,6 +736,9 @@ async def should_reply_group(
     if not message or not user or not chat:
         return False
 
+    if user.is_bot:
+        return False
+
     me = await context.bot.get_me()
     text = message.text or ""
 
@@ -751,10 +787,6 @@ async def should_reply_group(
         and message.reply_to_message.from_user
         and message.reply_to_message.from_user.id != me.id
     ):
-        return False
-
-    # 其他机器人消息不主动接话。
-    if user.is_bot:
         return False
 
     # ===== 普通群聊本地噪音过滤 =====
@@ -1152,7 +1184,6 @@ def _render_home_world_context(world):
 
 # Telegram 群聊自动复读状态，只保存在内存中。
 # {chat_id: {"text": str, "last_user": int, "count": int, "repeated": bool}}
-GROUP_REPEAT_STATE = {}
 
 # 睡着以后不会正常回消息。
 # 同一聊天中 10 分钟内被明确叫醒 3 次，才真正醒来。
@@ -1348,6 +1379,13 @@ async def handle_text(
     if not text:
         return
 
+    # Archiving is independent of whether the catgirl decides to answer.
+    group_saved_here = False
+    if chat.type in ("group", "supergroup"):
+        group_saved_here = await _archive_group_input(message, user, chat, text)
+        if not group_saved_here:
+            return
+
     # ===== 真实睡眠门控 =====
     # 睡着后不再一边聊天一边声称自己在睡。
     # 只有被明确连续叫醒三次，才恢复到 awake。
@@ -1399,44 +1437,6 @@ async def handle_text(
             )
 
         return
-
-    # ===== TG 群聊自动复读 =====
-    # 连续至少两名不同用户发送相同内容时，萤跟着复读一次。
-    if chat.type in ("group", "supergroup") and not user.is_bot:
-        repeat_text = " ".join(text.split())
-
-        # 命令和过长文本不参与复读。
-        if (
-            repeat_text
-            and not repeat_text.startswith("/")
-            and len(repeat_text) <= 300
-        ):
-            state = GROUP_REPEAT_STATE.get(chat.id)
-
-            if not state or state.get("text") != repeat_text:
-                # 新的一轮
-                GROUP_REPEAT_STATE[chat.id] = {
-                    "text": repeat_text,
-                    "last_user": user.id,
-                    "count": 1,
-                    "repeated": False,
-                }
-
-            elif state.get("last_user") != user.id:
-                # 只有不同用户才能把连续人数 +1
-                state["last_user"] = user.id
-                state["count"] = int(state.get("count", 1)) + 1
-
-                if (
-                    state["count"] >= 2
-                    and not state.get("repeated")
-                ):
-                    state["repeated"] = True
-
-                    await message.reply_text(
-                        repeat_text
-                    )
-                    return
 
     # ===== TG 国际象棋对局优先处理 =====
     # 有进行中的棋局时，普通文本优先作为棋局输入。
@@ -1657,20 +1657,13 @@ async def handle_text(
             else (None, None)
         )
 
-        saved = await save_message(
-            "telegram",
-            chat.id,
-            speaker_user_id,
-            speaker_username or speaker_display_name,
-            "user",
-            text,
-            person_id=person["person_id"],
-            message_id=message.message_id,
-            reply_to_message_id=(
-                replied.message_id if replied else None
-            ),
+        saved = group_saved_here if is_group else await save_message(
+            "telegram", chat.id, speaker_user_id,
+            speaker_username or speaker_display_name, "user", text,
+            person_id=person["person_id"], message_id=message.message_id,
+            reply_to_message_id=(replied.message_id if replied else None),
             reply_to_user_id=reply_target_user_id,
-            reply_to_name=reply_target_name
+            reply_to_name=reply_target_name,
         )
 
 
@@ -1765,7 +1758,7 @@ async def handle_text(
 
     # ===== 群聊功能请求绕过随机参与门控 =====
     # Reminder / Reminder Pending 属于确定性功能，
-    # 不能被群聊 50% 随机概率或 60 秒冷却拦截。
+    # 不能被群聊 40% 随机概率或 60 秒冷却拦截。
     reminder_key = (chat.id, str(speaker_user_id))
 
     reminder_intent = (
@@ -2195,6 +2188,10 @@ async def handle_text(
             runtime_context["events"] = ""
 
         dynamic_context = render_context(runtime_context)
+        if is_group:
+            dynamic_context += "\n\n【VPS 群消息整理】\n" + await group_digest(
+                "telegram", chat.id, current_user_id=str(speaker_user_id),
+            )
 
         # ===== 当前国际象棋陪玩上下文 =====
         if (
@@ -3174,24 +3171,31 @@ async def handle_photo(
 
     owner = is_owner("telegram", user.id)
     is_group = chat.type in ("group", "supergroup")
+    caption = (message.caption or "").strip()
+
+    if is_group:
+        saved = await _archive_group_input(
+            message, user, chat, f"[图片，正在提取文字摘要] {caption}".strip()
+        )
+        if not saved:
+            return
+
+    should_reply = owner or (is_group and await _is_direct_media_to_ying(message, context))
 
     if chat.type == "private":
         if not owner:
             return
-    elif is_group:
-        if not owner and not await _is_direct_media_to_ying(
-            message,
-            context,
-        ):
-            return
-    else:
+    elif not is_group:
         return
 
     # 真正睡着时不因为一张图片突然“诈尸”。
     try:
         life = await get_life_state()
         if life.get("sleep_state") == "sleeping":
-            return
+            if is_group:
+                should_reply = False
+            else:
+                return
     except Exception:
         pass
 
@@ -3244,14 +3248,9 @@ async def handle_photo(
             custom_path=temp_path
         )
 
-        caption = (
-            message.caption or ""
-        ).strip()
-
         if not owner and protected_request(caption):
-            await message.reply_text(
-                safe_refusal_text()
-            )
+            if should_reply:
+                await message.reply_text(safe_refusal_text())
             return
 
         actor = "OWNER" if owner else "当前群成员"
@@ -3282,6 +3281,12 @@ async def handle_photo(
         if not result:
             result = "这张图我看到了，不过这次没识别出有效内容。"
 
+        if is_group:
+            await update_group_media_summary(
+                "telegram", chat.id, message.message_id,
+                f"[图片摘要] {result} " + (f"[附言] {caption}" if caption else ""),
+            )
+
         # 只保存文字视觉摘要；图片本体离开 /tmp 后即删除。
         try:
             await add_vision_memory(
@@ -3311,6 +3316,9 @@ async def handle_photo(
                 log.exception(
                     "Photo caption profile observation failed"
                 )
+
+        if not should_reply:
+            return
 
         outgoing = await _build_vision_persona_reply(
             message=message,
@@ -3376,6 +3384,14 @@ async def handle_sticker(
         or not chat
         or not message.sticker
     ):
+        return
+
+    if chat.type in ("group", "supergroup"):
+        sticker = message.sticker
+        await _archive_group_input(
+            message, user, chat,
+            f"[表情包] {sticker.emoji or '无文字'}（图片内容未识别）",
+        )
         return
 
     if not is_owner("telegram", user.id):
@@ -3599,6 +3615,11 @@ def build_application():
         .proxy(TELEGRAM_PROXY_URL)
         .get_updates_proxy(TELEGRAM_PROXY_URL)
         .build()
+    )
+
+    app.add_handler(
+        MessageHandler(filters.ChatType.GROUPS & filters.COMMAND, archive_group_command),
+        group=-1,
     )
 
     app.add_handler(

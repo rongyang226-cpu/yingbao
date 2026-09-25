@@ -16,6 +16,10 @@ async def main():
         message_id=data.get("message_id"),
         mentioned_bot=bool(data.get("mentioned_bot")),
         replied_to_bot=bool(data.get("replied_to_bot")),
+        replied_message_id=data.get("replied_message_id"),
+        reply_to_user_id=data.get("reply_to_user_id"),
+        reply_to_name=data.get("reply_to_name"),
+        mentions_other=bool(data.get("mentions_other")),
         is_owner=bool(data.get("is_owner")),
     )
 

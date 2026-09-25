@@ -12,7 +12,9 @@ from websockets.asyncio.client import connect
 from app.social.people import get_or_create_person
 from app.social.address_memory import remember_preferred_address
 from app.social.state_engine import register_interaction
-from app.db import save_message
+from app.db import save_message, get_message_reply_target
+from app.context.group_digest import group_digest
+from app.security.policy import protected_request, safe_refusal_text
 from app.platforms.qq.qq_builder import render_context
 
 QQ_PERSONA_FILE = Path("/opt/ying/persona/qq_core.md")
@@ -722,6 +724,15 @@ async def handle_qq_private(ws, msg):
     if not saved:
         return
 
+    if user_id != QQ_OWNER_ID and protected_request(text):
+        refusal = ensure_cat_miao(safe_refusal_text())
+        await send_private_message(ws, user_id, refusal)
+        await save_message(
+            "qq", chat_id, "cat", "猫猫", "assistant", refusal,
+            person_id=None, message_id=None,
+        )
+        return
+
     # OWNER 私聊权限管理。
     try:
         permission_reply = await handle_owner_permission_command(
@@ -904,8 +915,14 @@ def should_reply_qq_group(msg):
     if last is not None and now_ts - last < 60:
         return False
 
-    # 普通群聊 50% 概率参与
-    if random.random() >= 0.30:
+    # 明确回复他人或 @ 他人时，不随机插话。
+    if msg.get("replied_message_id") and not msg.get("replied_to_bot") and not msg.get("mentioned_bot"):
+        return False
+    if msg.get("mentions_other") and not msg.get("mentioned_bot"):
+        return False
+
+    # 普通群聊基础参与率 40%。
+    if random.random() >= 0.40:
         return False
 
     QQ_GROUP_LAST_REPLY[key] = now_ts
@@ -951,7 +968,16 @@ async def handle_qq_group(ws, msg):
         )
         return
 
-    # 所有真实群消息先保存。
+    replied_uid = str(msg.get("reply_to_user_id") or "")
+    replied_name = str(msg.get("reply_to_name") or "")
+    replied_id = msg.get("replied_message_id")
+    if replied_id and not replied_uid:
+        referenced = await get_message_reply_target("qq", group_id, replied_id)
+        if referenced:
+            replied_uid = str(referenced["message_user_id"] or "")
+            replied_name = str(referenced["message_username"] or "")
+
+    # 所有从平台收到的群消息先保存，发言者和引用目标分别归档。
     # chat_id 使用 group_id，因此不会和私聊混在一起。
     saved = await save_message(
         "qq",
@@ -962,9 +988,17 @@ async def handle_qq_group(ws, msg):
         text,
         person_id=person["person_id"],
         message_id=msg.get("message_id"),
+        reply_to_message_id=replied_id,
+        reply_to_user_id=replied_uid or None,
+        reply_to_name=replied_name or None,
     )
 
     if not saved:
+        return
+
+    if protected_request(text):
+        if msg.get("mentioned_bot") or msg.get("replied_to_bot") or text.startswith("猫猫"):
+            await send_group_message(ws, group_id, safe_refusal_text())
         return
 
     if not should_reply_qq_group(msg):
@@ -1016,6 +1050,9 @@ async def handle_qq_group(ws, msg):
     if system_prompt:
         system_prompt += "\n\n"
     system_prompt += render_context(ctx)
+    system_prompt += "\n\n【VPS 群消息整理】\n" + await group_digest(
+        "qq", group_id, current_user_id=user_id,
+    )
     system_prompt += "\n\n" + QQ_NATURAL_STYLE_RULES
 
     system_prompt += (
@@ -1034,7 +1071,11 @@ async def handle_qq_group(ws, msg):
     reply = await chat(
         system_prompt=system_prompt,
         history=history,
-        user_text=text,
+        user_text=(
+            f"[当前发言者 uid={user_id} name={nickname}]"
+            + (f"[直接回复 uid={replied_uid} name={replied_name or '群成员'}]" if replied_uid else "")
+            + f" {text}"
+        ),
         max_tokens=160,
     )
 

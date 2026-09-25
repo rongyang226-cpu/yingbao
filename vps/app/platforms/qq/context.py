@@ -72,12 +72,12 @@ async def get_qq_identity_history(
 
     rows.reverse()
 
-    # 旧人格时期的消息保留在数据库中，
-    # 但不送入猫猫的模型上下文。
+    # 历史里提到“萤”的群成员仍然是原来的发言者；
+    # 仅过滤旧机器人以“萤”自称的回复，避免串入猫猫人格。
     rows = [
         row for row in rows
-        if "萤" not in str(row[1] or "")
-        and "莹" not in str(row[1] or "")
+        if not (row[0] == "assistant" and
+                ("萤" in str(row[1] or "") or "莹" in str(row[1] or "")))
     ]
 
     history = []

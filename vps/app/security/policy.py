@@ -34,4 +34,4 @@ def protected_request(text: str) -> bool:
 
 def safe_refusal_text() -> str:
     # 保持角色感，但不解释安全实现。
-    return "这个不行。别打我后台的主意。"
+    return "想绕过权限？门在那边，别拿纸片钥匙逗我，喵。"

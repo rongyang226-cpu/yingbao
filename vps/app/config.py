@@ -35,7 +35,7 @@ DEEPSEEK_MODEL = os.getenv(
     "deepseek-chat"
 ).strip()
 
-GROUP_REPLY_PROBABILITY = 0.30
+GROUP_REPLY_PROBABILITY = 0.40
 
 
 def validate():
