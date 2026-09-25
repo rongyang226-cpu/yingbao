@@ -1,22 +1,44 @@
-name: Release Yingbao APK
+name: Publish Yingbao APKs
+
 on:
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
+    paths:
+      - "dist/Yingbao-v2.9.0-normal.apk"
+      - "dist/Yingbao-v2.9.0-compat.apk"
+      - ".github/workflows/release-apk.yml"
+  workflow_dispatch:
+
 permissions:
   contents: write
+
 jobs:
   release:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Prepare release asset
+
+      - name: Prepare release assets
         run: |
-          APK="$(find dist -maxdepth 1 -type f -name 'Yingbao-v*.apk' -printf '%f\n' | sort -V | tail -1)"
-          test -n "$APK"
-          cp "dist/$APK" Yingbao.apk
-      - name: Create GitHub Release
+          cp dist/Yingbao-v2.9.0-normal.apk Yingbao.apk
+          cp dist/Yingbao-v2.9.0-normal.apk Yingbao-normal.apk
+          cp dist/Yingbao-v2.9.0-compat.apk Yingbao-vivo-compat.apk
+          test -s Yingbao.apk
+          test -s Yingbao-normal.apk
+          test -s Yingbao-vivo-compat.apk
+
+      - name: Update GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${GITHUB_REF_NAME}" Yingbao.apk --title "莹宝 ${GITHUB_REF_NAME}" --notes "莹宝 Android 2.0。点击 Assets 下的 Yingbao.apk 直接下载。"
+          gh release upload v2.9.0             Yingbao.apk             Yingbao-normal.apk             Yingbao-vivo-compat.apk             --clobber
+
+          gh release edit v2.9.0             --title "莹宝 v2.9.0"             --notes "莹宝 Android v2.9.0 双版本。
+
+          Assets 下载：
+          - Yingbao.apk：标准版（推荐新 Android / 新 WebView）
+          - Yingbao-normal.apk：标准版同内容，便于识别
+          - Yingbao-vivo-compat.apk：vivo Y9s / 老 WebView 兼容版，关闭高风险前端特效并使用 HTTP 状态同步
+
+          两个版本连接同一个 VPS、同一个萤、同一份记忆与生活状态。"
